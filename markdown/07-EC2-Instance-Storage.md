@@ -59,14 +59,20 @@
 
 ### Sơ đồ ví dụ (từ slide)
 
-```
-        US-EAST-1A                      US-EAST-1B
-   ┌──────────────────┐            ┌──────────────────┐
-   │  EC2 ── EBS 10GB │            │  EC2 ── EBS 50GB │
-   │      └─ EBS 100GB│            │                  │
-   │                  │            │      EBS 10GB    │
-   │      EBS 50GB    │            │    (unattached)  │
-   └──────────────────┘            └──────────────────┘
+```mermaid
+flowchart LR
+    subgraph A["US-EAST-1A"]
+        EC2A["EC2"]
+        EC2A --- V1["EBS 10 GB"]
+        EC2A --- V2["EBS 100 GB"]
+        V3["EBS 50 GB<br/>(unattached)"]
+    end
+
+    subgraph B["US-EAST-1B"]
+        EC2B["EC2"]
+        EC2B --- V4["EBS 50 GB"]
+        V5["EBS 10 GB<br/>(unattached)"]
+    end
 ```
 
 Nhận xét từ sơ đồ:
@@ -171,12 +177,20 @@ Tài liệu tham khảo (từ `code_v2025-10-27/ebs/commands.txt`):
 
 ### Sơ đồ
 
-```
-    US-EAST-1A                              US-EAST-1B
-  ┌──────────┐                            ┌──────────┐
-  │   EBS    │  ──snapshot──►  EBS        │   EBS    │
-  │  (50 GB) │                Snapshot ───│  (50 GB) │
-  └──────────┘                  restore──►└──────────┘
+```mermaid
+flowchart LR
+    subgraph A["US-EAST-1A"]
+        E1["EBS (50 GB)"]
+    end
+
+    SNAP["EBS Snapshot"]
+
+    subgraph B["US-EAST-1B"]
+        E2["EBS (50 GB)"]
+    end
+
+    E1 -->|"snapshot"| SNAP
+    SNAP -->|"restore"| E2
 ```
 
 > **Đây chính là cách di chuyển EBS volume sang AZ hoặc Region khác:** snapshot → copy → restore.
@@ -206,12 +220,11 @@ Ba tính năng quan trọng (rất hay ra thi):
 
 ### Sơ đồ tính năng
 
-```
-                    ┌──── archive ────►  EBS Snapshot Archive  (rẻ hơn 75%,
-                    │                                            restore 24-72h)
-    EBS Snapshot ───┤
-                    │
-                    └──── delete ─────►  Recycle Bin  (giữ 1 ngày → 1 năm)
+```mermaid
+flowchart LR
+    S["EBS Snapshot"]
+    S -->|"archive"| A["EBS Snapshot Archive<br/>rẻ hơn 75%, restore 24–72h"]
+    S -->|"delete"| R["Recycle Bin<br/>giữ 1 ngày → 1 năm"]
 ```
 
 ### Bảng tổng hợp 3 tính năng ⭐
@@ -318,13 +331,20 @@ Quy trình 4 bước (nguyên văn slide):
 
 ### Sơ đồ
 
-```
-    US-EAST-1A                                    US-EAST-1B
-  ┌───────────┐                                 ┌───────────┐
-  │    EC2    │ ──Create AMI──►  Custom AMI ──► │    EC2    │
-  │(tùy biến) │                              Launch        │
-  └───────────┘                              from AMI      │
-                                                └───────────┘
+```mermaid
+flowchart LR
+    subgraph A["US-EAST-1A"]
+        E1["EC2<br/>(đã tùy biến)"]
+    end
+
+    AMI["Custom AMI"]
+
+    subgraph B["US-EAST-1B"]
+        E2["EC2"]
+    end
+
+    E1 -->|"Create AMI"| AMI
+    AMI -->|"Launch from AMI"| E2
 ```
 
 > **Điểm quan trọng:** AMI cho phép launch instance ở **AZ khác** (và Region khác nếu copy AMI) với **cấu hình y hệt**.
@@ -424,9 +444,17 @@ Xóa AMI đúng cách gồm **2 bước**:
 
 ### Vì sao nhanh hơn?
 
-```
-EBS:            EC2 ──── MẠNG ────► EBS Volume  (có latency mạng)
-Instance Store: EC2 ──── gắn TRỰC TIẾP ───► Ổ đĩa vật lý trên máy chủ  (không qua mạng)
+```mermaid
+flowchart LR
+    subgraph EBSG["EBS"]
+        direction LR
+        E1["EC2"] -->|"qua MẠNG (có latency)"| V1["EBS Volume"]
+    end
+
+    subgraph ISG["Instance Store"]
+        direction LR
+        E2["EC2"] -->|"gắn TRỰC TIẾP, không qua mạng"| V2["Ổ đĩa vật lý trên máy chủ"]
+    end
 ```
 
 → **Very high IOPS** (IOPS rất cao — theo slide, có thể lên tới hàng triệu IOPS).
@@ -584,19 +612,18 @@ Tài liệu tham chiếu (từ slide):
 
 ### Sơ đồ
 
-```
-┌────────────── Availability Zone 1 ──────────────┐
-│                                                  │
-│   ┌─────┐    ┌─────┐    ┌─────┐                 │
-│   │ EC2 │    │ EC2 │    │ EC2 │                 │
-│   └──┬──┘    └──┬──┘    └──┬──┘                 │
-│      └──────────┼──────────┘                    │
-│                 ▼                                │
-│      ┌────────────────────────┐                 │
-│      │ io2 volume             │                 │
-│      │ with Multi-Attach      │                 │
-│      └────────────────────────┘                 │
-└──────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph AZ["Availability Zone 1"]
+        E1["EC2"]
+        E2["EC2"]
+        E3["EC2"]
+        VOL["io2 volume<br/>with Multi-Attach"]
+
+        E1 --> VOL
+        E2 --> VOL
+        E3 --> VOL
+    end
 ```
 
 ### Use case (nguyên văn slide)
@@ -668,13 +695,12 @@ Bước 4: Now you can attach the encrypted volume to the original instance
 
 ### Sơ đồ quy trình
 
-```
-   EBS Volume            EBS Snapshot         EBS Snapshot        EBS Volume
-  (chưa mã hóa)  ──►    (chưa mã hóa)  ──►    (ĐÃ mã hóa)  ──►   (ĐÃ mã hóa)
-                snapshot            COPY + Encrypt        create volume
-                                                                     │
-                                                                     ▼
-                                                          attach vào instance
+```mermaid
+flowchart LR
+    V1["EBS Volume<br/>(chưa mã hóa)"] -->|"snapshot"| S1["EBS Snapshot<br/>(chưa mã hóa)"]
+    S1 -->|"COPY + Encrypt"| S2["EBS Snapshot<br/>(ĐÃ mã hóa)"]
+    S2 -->|"create volume"| V2["EBS Volume<br/>(ĐÃ mã hóa)"]
+    V2 --> ATT["Attach vào instance"]
 ```
 
 ### Bảng tổng hợp hành vi mã hóa ⭐
@@ -707,20 +733,25 @@ Bước 4: Now you can attach the encrypted volume to the original instance
 
 ### Sơ đồ
 
-```
-     us-east-1a          us-east-1b          us-east-1c
-   ┌────────────┐      ┌────────────┐      ┌────────────┐
-   │ EC2        │      │ EC2        │      │ EC2        │
-   │ Instances  │      │ Instances  │      │ Instances  │
-   └─────┬──────┘      └─────┬──────┘      └─────┬──────┘
-         │                   │                   │
-         └───────────┬───────┴───────────────────┘
-                     ▼
-            ┌─────────────────┐
-            │ Security Group  │
-            ├─────────────────┤
-            │  EFS FileSystem │
-            └─────────────────┘
+```mermaid
+flowchart TD
+    subgraph A["us-east-1a"]
+        EA["EC2 Instances"]
+    end
+    subgraph B["us-east-1b"]
+        EB["EC2 Instances"]
+    end
+    subgraph C["us-east-1c"]
+        EC["EC2 Instances"]
+    end
+
+    SG["Security Group"]
+    EFS["EFS FileSystem"]
+
+    EA --> SG
+    EB --> SG
+    EC --> SG
+    SG --> EFS
 ```
 
 ### Đặc điểm chi tiết ⭐
@@ -775,10 +806,9 @@ Bước 4: Now you can attach the encrypted volume to the original instance
 
 - **Triển khai lifecycle policies để tự động chuyển file giữa các storage tier**.
 
-```
-                    no access for 60 days
-    EFS Standard  ──────────────────────►  EFS IA
-                     (Lifecycle Policy)
+```mermaid
+flowchart LR
+    STD["EFS Standard"] -->|"no access for 60 days<br/>(Lifecycle Policy)"| IA["EFS IA"]
 ```
 
 #### Availability and Durability ⭐
@@ -949,12 +979,20 @@ sudo mount -a               # kiểm tra cấu hình fstab không lỗi
 
 **Root EBS Volume** của instance **bị xóa mặc định** khi EC2 instance bị terminate (**có thể tắt hành vi này**).
 
-```
-  Availability Zone 1              Availability Zone 2
-     ┌──────┐                          ┌──────┐
-     │ EBS  │──snapshot──► EBS ────────│ EBS  │
-     └──────┘             Snapshot     └──────┘
-                              restore──►
+```mermaid
+flowchart LR
+    subgraph A["Availability Zone 1"]
+        E1["EBS"]
+    end
+
+    SNAP["EBS Snapshot"]
+
+    subgraph B["Availability Zone 2"]
+        E2["EBS"]
+    end
+
+    E1 -->|"snapshot"| SNAP
+    SNAP -->|"restore"| E2
 ```
 
 ---
@@ -967,22 +1005,19 @@ sudo mount -a               # kiểm tra cấu hình fstab không lỗi
 - **EFS có mức giá CAO HƠN EBS** ⭐
 - **Có thể tận dụng Storage Tiers để tiết kiệm chi phí**
 
-```
-  Availability Zone 1              Availability Zone 2
-    ┌─────────┐                       ┌─────────┐
-    │  Linux  │                       │  Linux  │
-    └────┬────┘                       └────┬────┘
-         │                                 │
-    ┌────▼─────┐                      ┌────▼─────┐
-    │   EFS    │                      │   EFS    │
-    │  Mount   │                      │  Mount   │
-    │  Target  │                      │  Target  │
-    └────┬─────┘                      └────┬─────┘
-         └──────────────┬─────────────────┘
-                        ▼
-                     ┌─────┐
-                     │ EFS │
-                     └─────┘
+```mermaid
+flowchart TD
+    subgraph A["Availability Zone 1"]
+        L1["Linux"] --> M1["EFS Mount Target"]
+    end
+
+    subgraph B["Availability Zone 2"]
+        L2["Linux"] --> M2["EFS Mount Target"]
+    end
+
+    EFS["EFS"]
+    M1 --> EFS
+    M2 --> EFS
 ```
 
 > **Nhớ: EFS vs EBS vs Instance Store** — đây là bộ ba luôn được so sánh trong đề thi.

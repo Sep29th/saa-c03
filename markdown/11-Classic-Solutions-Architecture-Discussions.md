@@ -44,14 +44,12 @@
 
 ### Tư duy chung xuyên suốt
 
-```
-Bắt đầu ĐƠN GIẢN
-   │
-   ├─► Gặp vấn đề (downtime, không scale được, mất dữ liệu…)
-   │
-   ├─► Thêm MỘT thành phần giải quyết đúng vấn đề đó
-   │
-   └─► Lặp lại → kiến trúc trưởng thành dần
+```mermaid
+flowchart TD
+    A["Bắt đầu ĐƠN GIẢN"] --> B["Gặp vấn đề<br/>downtime, không scale được, mất dữ liệu…"]
+    B --> C["Thêm MỘT thành phần giải quyết đúng vấn đề đó"]
+    C --> D["Lặp lại → kiến trúc trưởng thành dần"]
+    D --> B
 ```
 
 ---
@@ -70,9 +68,11 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 1 — Starting simple (Bắt đầu đơn giản)
 
-```
-   User ──What time is it?──► [Elastic IP Address] ──► Public EC2
-        ◄────── 5:30 pm! ──────────────────────────────┘
+```mermaid
+flowchart LR
+    U["User"] -->|"What time is it?"| EIP["Elastic IP Address"]
+    EIP --> EC2["Public EC2"]
+    EC2 -->|"5:30 pm!"| U
 ```
 
 | Thành phần | Vai trò |
@@ -86,11 +86,12 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 2 — Scaling vertically (Scale theo chiều DỌC)
 
-```
-   User ──What time is it?──► [Elastic IP Address] ──► Public EC2 (t2.micro → M5)
-        ◄── 5:30 pm! / 6:30 pm! / 7:30 pm! ──────────────┘
-                  ▲
-        ⚠️ DOWNTIME while upgrading to M5
+```mermaid
+flowchart LR
+    U["User"] -->|"What time is it?"| EIP["Elastic IP Address"]
+    EIP --> EC2["Public EC2<br/>t2.micro → M5"]
+    EC2 -->|"5:30 pm! / 6:30 pm! / 7:30 pm!"| U
+    EC2 -.- N["⚠️ DOWNTIME while upgrading to M5"]
 ```
 
 - ⭐ **Nâng cấp instance type** (ví dụ `t2.micro` → `M5`) để phục vụ nhiều user hơn.
@@ -103,10 +104,15 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 3 — Scaling horizontally (Scale theo chiều NGANG)
 
-```
-   User ──What time is it?──► Public EC2 instance #1 ──► 5:30 pm!
-        ──What time is it?──► Public EC2 instance #2 ──► 6:30 pm!
-        ──What time is it?──► Public EC2 instance #3 ──► 7:30 pm!
+```mermaid
+flowchart LR
+    U["User"] -->|"What time is it?"| E1["Public EC2 instance #1"]
+    U -->|"What time is it?"| E2["Public EC2 instance #2"]
+    U -->|"What time is it?"| E3["Public EC2 instance #3"]
+
+    E1 -->|"5:30 pm!"| U
+    E2 -->|"6:30 pm!"| U
+    E3 -->|"7:30 pm!"| U
 ```
 
 - ⭐ **Thêm NHIỀU EC2 instance**, mỗi cái có Elastic IP riêng.
@@ -117,13 +123,16 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 4 — Dùng Route 53 thay Elastic IP ⭐
 
-```
-   DNS Query for api.whatisthetime.com
-   ⭐ A Record — TTL 1 hour
-            │
-   User ────┼──► Public EC2 instance #1 (No Elastic IP) ──► 5:30 pm!
-            ├──► Public EC2 instance #2 (No Elastic IP) ──► 6:30 pm!
-            └──► Public EC2 instance #3 (No Elastic IP) ──► 7:30 pm!
+```mermaid
+flowchart LR
+    U["User"] --> DNS["DNS Query for api.whatisthetime.com<br/>⭐ A Record — TTL 1 hour"]
+    DNS --> E1["Public EC2 instance #1<br/>(No Elastic IP)"]
+    DNS --> E2["Public EC2 instance #2<br/>(No Elastic IP)"]
+    DNS --> E3["Public EC2 instance #3<br/>(No Elastic IP)"]
+
+    E1 --> R1["5:30 pm!"]
+    E2 --> R2["6:30 pm!"]
+    E3 --> R3["7:30 pm!"]
 ```
 
 - ⭐ **Bỏ Elastic IP**, dùng **Route 53 với A Record** trỏ tới public IP của các instance.
@@ -133,13 +142,15 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 5 — Vấn đề khi thêm/bớt instance ⭐⭐
 
-```
-   DNS Query for api.whatisthetime.com
-   ⭐ A Record — TTL 1 hour
-            │
-   User ────┼──► ❌ INSTANCE IS GONE!   ← client vẫn cache IP cũ 1 giờ!
-            ├──► Public EC2 instance #2 ──► 6:30 pm!
-            └──► Public EC2 instance #3 ──► 7:30 pm!
+```mermaid
+flowchart LR
+    U["User"] --> DNS["DNS Query for api.whatisthetime.com<br/>⭐ A Record — TTL 1 hour"]
+    DNS --> E1["❌ INSTANCE IS GONE!<br/>client vẫn cache IP cũ 1 giờ!"]
+    DNS --> E2["Public EC2 instance #2"]
+    DNS --> E3["Public EC2 instance #3"]
+
+    E2 --> R2["6:30 pm!"]
+    E3 --> R3["7:30 pm!"]
 ```
 
 ⚠️⭐⭐ **Đây là bài học quan trọng nhất về TTL:**
@@ -153,13 +164,12 @@ Bắt đầu ĐƠN GIẢN
 
 ### 🔹 Bước 6 — Thêm Load Balancer ⭐⭐
 
-```
-   DNS Query for api.whatisthetime.com
-   ⭐ Alias Record
-            │
-   User ────► ELB + Health Checks ──┬──► Private EC2 instance (AZ 1)
-                                     └──► Private EC2 instance (AZ 1)
-              ▲ Restricted Security groups rules
+```mermaid
+flowchart LR
+    U["User"] --> DNS["DNS Query for api.whatisthetime.com<br/>⭐ Alias Record"]
+    DNS --> ELB["ELB + Health Checks<br/>▲ Restricted Security groups rules"]
+    ELB --> E1["Private EC2 instance (AZ 1)"]
+    ELB --> E2["Private EC2 instance (AZ 1)"]
 ```
 
 Thay đổi quan trọng:
@@ -177,12 +187,17 @@ Thay đổi quan trọng:
 
 ### 🔹 Bước 7 — Thêm Auto Scaling Group ⭐
 
-```
-   DNS Query for api.whatisthetime.com — Alias Record
-            │
-   User ────► ELB + Health Checks ──┬──► ┌─ Auto Scaling group ─┐
-                                     └──►│  EC2    EC2    EC2    │ (AZ 1)
-                                          └──────────────────────┘
+```mermaid
+flowchart LR
+    U["User"] --> DNS["DNS Query for api.whatisthetime.com — Alias Record"]
+    DNS --> ELB["ELB + Health Checks"]
+    ELB --> ASG
+
+    subgraph ASG["Auto Scaling group (AZ 1)"]
+        E1["EC2"]
+        E2["EC2"]
+        E3["EC2"]
+    end
 ```
 
 - ⭐ **ASG tự động thêm/bớt instance** theo tải.
@@ -193,16 +208,26 @@ Thay đổi quan trọng:
 
 ### 🔹 Bước 8 — Making our app Multi-AZ ⭐⭐
 
-```
-   DNS Query for api.whatisthetime.com — Alias Record
-            │
-   User ────► ⭐ ELB + Health Checks + MULTI AZ
-                    │            │            │
-              ┌─────▼──────┬─────▼──────┬─────▼──────┐
-              │    AZ 1    │    AZ 2    │    AZ 3    │
-              │   EC2      │   EC2      │   EC2      │
-              └────────────┴────────────┴────────────┘
-                  ⭐ Auto Scaling group (Availability zone 1 to 3)
+```mermaid
+flowchart TD
+    U["User"] --> DNS["DNS Query for api.whatisthetime.com — Alias Record"]
+    DNS --> ELB["⭐ ELB + Health Checks + MULTI AZ"]
+
+    ELB --> A1
+    ELB --> A2
+    ELB --> A3
+
+    subgraph ASG["⭐ Auto Scaling group (Availability zone 1 to 3)"]
+        subgraph A1["AZ 1"]
+            E1["EC2"]
+        end
+        subgraph A2["AZ 2"]
+            E2["EC2"]
+        end
+        subgraph A3["AZ 3"]
+            E3["EC2"]
+        end
+    end
 ```
 
 - ⭐⭐ **Trải cả ELB lẫn ASG trên NHIỀU AZ** → **sống sót khi mất một Data Center**.
@@ -269,11 +294,13 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 1 — Xuất phát từ kiến trúc của WhatIsTheTime.com
 
-```
-   ELB (Multi AZ) ──┬──► AZ 1: EC2
-                    ├──► AZ 2: EC2
-                    └──► AZ 3: EC2
-              ⭐ Auto Scaling group
+```mermaid
+flowchart LR
+    ELB["ELB (Multi AZ)"] --> E1["AZ 1: EC2"]
+    ELB --> E2["AZ 2: EC2"]
+    ELB --> E3["AZ 3: EC2"]
+
+    ELB -.- ASG["⭐ Auto Scaling group"]
 ```
 
 ⚠️ **Vấn đề:** ⭐⭐ **User gửi request tới instance A (bỏ đồ vào giỏ), request sau đi tới instance B → MẤT GIỎ HÀNG!**
@@ -282,10 +309,11 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 2 — Introduce Stickiness (Session Affinity) ⭐
 
-```
-   ELB ──⭐ ELB Stickiness──┬──► AZ 1: EC2  ← user LUÔN về đúng instance này
-                            ├──► AZ 2: EC2
-                            └──► AZ 3: EC2
+```mermaid
+flowchart LR
+    ELB["ELB<br/>⭐ ELB Stickiness"] --> E1["AZ 1: EC2<br/>← user LUÔN về đúng instance này"]
+    ELB --> E2["AZ 2: EC2"]
+    ELB --> E3["AZ 3: EC2"]
 ```
 
 - ⭐ **Bật ELB Sticky Sessions** → cùng một client luôn về cùng một instance → **giỏ hàng được giữ**.
@@ -296,10 +324,12 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 3 — Introduce User Cookies ⭐⭐
 
-```
-   Client ──⭐ Send shopping cart content in Web Cookies──► ELB ──┬──► EC2 (AZ 1)
-                                                                   ├──► EC2 (AZ 2)
-                                                                   └──► EC2 (AZ 3)
+```mermaid
+flowchart LR
+    C["Client"] -->|"⭐ Send shopping cart content in Web Cookies"| ELB["ELB"]
+    ELB --> E1["EC2 (AZ 1)"]
+    ELB --> E2["EC2 (AZ 2)"]
+    ELB --> E3["EC2 (AZ 3)"]
 ```
 
 - ⭐ **Lưu TOÀN BỘ nội dung giỏ hàng trong Web Cookie ở phía client**.
@@ -320,16 +350,18 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 4 — ElastiCache cho Session Store ⭐⭐⭐
 
-```
-   Client ──⭐ Send session_id in Web Cookies──► ELB ──┬──► EC2 (AZ 1)
-                                                        ├──► EC2 (AZ 2)
-                                                        └──► EC2 (AZ 3)
-                                                              │
-                                          ⭐ Store / retrieve session data
-                                                              │
-                                         ┌────────────────────┴────────────┐
-                                         ▼                                 ▼
-                                  ElastiCache (Multi AZ)      ⭐ Amazon DynamoDB (thay thế)
+```mermaid
+flowchart TD
+    C["Client"] -->|"⭐ Send session_id in Web Cookies"| ELB["ELB"]
+    ELB --> E1["EC2 (AZ 1)"]
+    ELB --> E2["EC2 (AZ 2)"]
+    ELB --> E3["EC2 (AZ 3)"]
+
+    E1 -->|"⭐ Store / retrieve session data"| EC["ElastiCache (Multi AZ)"]
+    E2 --> EC
+    E3 --> EC
+
+    E1 -.-> DDB["⭐ Amazon DynamoDB (thay thế)"]
 ```
 
 - ⭐⭐ **Chỉ gửi `session_id` trong cookie** (rất nhỏ, an toàn hơn)
@@ -350,14 +382,19 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 5 — Storing User Data in a database ⭐
 
-```
-   ELB ──┬──► EC2 (AZ 1) ──┐
-         ├──► EC2 (AZ 2) ──┼── ElastiCache (session)
-         └──► EC2 (AZ 3) ──┘
-                │
-       ⭐ Store / retrieve user data (address, name, etc)
-                ▼
-         Amazon RDS (Multi AZ)
+```mermaid
+flowchart TD
+    ELB["ELB"] --> E1["EC2 (AZ 1)"]
+    ELB --> E2["EC2 (AZ 2)"]
+    ELB --> E3["EC2 (AZ 3)"]
+
+    E1 --> EC["ElastiCache (session)"]
+    E2 --> EC
+    E3 --> EC
+
+    E1 -->|"⭐ Store / retrieve user data<br/>address, name, etc"| RDS["Amazon RDS (Multi AZ)"]
+    E2 --> RDS
+    E3 --> RDS
 ```
 
 - ⭐ **Dữ liệu người dùng lâu dài** (địa chỉ, tên…) → lưu trong **RDS**.
@@ -367,10 +404,11 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 6 — Scaling Reads ⭐
 
-```
-              ┌── writes ──► RDS Master
-   EC2 ───────┤                  │ ⭐ replication
-              └── reads ───► RDS Read Replicas
+```mermaid
+flowchart LR
+    EC2["EC2"] -->|"writes"| M["RDS Master"]
+    EC2 -->|"reads"| R["RDS Read Replicas"]
+    M -->|"⭐ replication"| R
 ```
 
 - ⭐ **Thêm RDS Read Replicas** để **scale khả năng ĐỌC** (tối đa **15 replica**).
@@ -379,11 +417,12 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 ### 🔹 Bước 7 — Scaling Reads (Alternative) — Lazy Loading ⭐⭐
 
-```
-   EC2 ──⭐ Read from cache──► ElastiCache ──cache hit?──┐
-                                    │ miss               │ hit → trả về ngay
-                                    ▼                    │
-                              ⭐ Read/write ──► RDS ──────┘
+```mermaid
+flowchart LR
+    EC2["EC2"] -->|"⭐ Read from cache"| EC["ElastiCache"]
+    EC -->|"cache hit → trả về ngay"| EC2
+    EC -->|"cache miss"| RDS["⭐ Read/write RDS"]
+    RDS -->|"ghi lại vào cache"| EC
 ```
 
 - ⭐⭐ **Giải pháp THAY THẾ cho Read Replicas: dùng ElastiCache với pattern LAZY LOADING**
@@ -410,26 +449,12 @@ Tổng kết các khái niệm của bài này (nguyên văn slide):
 
 Đây là **mô hình bảo mật phân tầng kinh điển** (nguyên văn slide):
 
-```
-   Internet
-      │ ⭐ Open HTTP / HTTPS to 0.0.0.0/0
-      ▼
-   ┌──────────────┐
-   │     ELB      │  SG: cho phép 80/443 từ BẤT CỨ ĐÂU
-   └──────┬───────┘
-          │ ⭐ Restrict traffic to EC2 Security group FROM THE LB
-          ▼
-   ┌──────────────┐
-   │  EC2 (ASG)   │  SG: chỉ cho phép từ SG của ELB
-   └──┬────────┬──┘
-      │        │
-      │        └─⭐ Restrict traffic to RDS Security group FROM THE EC2 security group
-      │                    ▼
-      │                   RDS         SG: chỉ cho phép từ SG của EC2
-      │
-      └─⭐ Restrict traffic to ElastiCache Security group FROM THE EC2 security group
-                   ▼
-              ElastiCache            SG: chỉ cho phép từ SG của EC2
+```mermaid
+flowchart TD
+    NET["Internet"] -->|"⭐ Open HTTP / HTTPS to 0.0.0.0/0"| ELB["ELB<br/>SG: cho phép 80/443 từ BẤT CỨ ĐÂU"]
+    ELB -->|"⭐ Restrict traffic to EC2 Security group FROM THE LB"| EC2["EC2 (ASG)<br/>SG: chỉ cho phép từ SG của ELB"]
+    EC2 -->|"⭐ Restrict traffic to RDS Security group FROM THE EC2 security group"| RDS["RDS<br/>SG: chỉ cho phép từ SG của EC2"]
+    EC2 -->|"⭐ Restrict traffic to ElastiCache Security group FROM THE EC2 security group"| EC["ElastiCache<br/>SG: chỉ cho phép từ SG của EC2"]
 ```
 
 ### ⭐⭐ Nguyên tắc vàng:
@@ -465,11 +490,17 @@ Tổng kết (nguyên văn slide):
 
 ### 🔹 Bước 1 — RDS layer
 
-```
-   ELB ──┬──► AZ 1: EC2 ──┐
-         ├──► AZ 2: EC2 ──┼──► ⭐ RDS Multi AZ (MySQL)
-         └──► AZ 3: EC2 ──┘
-      ⭐ Auto Scaling group
+```mermaid
+flowchart LR
+    ELB["ELB"] --> E1["AZ 1: EC2"]
+    ELB --> E2["AZ 2: EC2"]
+    ELB --> E3["AZ 3: EC2"]
+
+    E1 --> DB["⭐ RDS Multi AZ (MySQL)"]
+    E2 --> DB
+    E3 --> DB
+
+    ELB -.- ASG["⭐ Auto Scaling group"]
 ```
 
 - ⭐ **RDS MySQL Multi-AZ** để lưu nội dung blog và user data.
@@ -478,11 +509,17 @@ Tổng kết (nguyên văn slide):
 
 ### 🔹 Bước 2 — Scaling with Aurora: Multi AZ & Read Replicas ⭐
 
-```
-   ELB ──┬──► AZ 1: EC2 ──┐
-         ├──► AZ 2: EC2 ──┼──► ⭐ Aurora MySQL
-         └──► AZ 3: EC2 ──┘      • Multi AZ
-      Auto Scaling group          • Read Replicas
+```mermaid
+flowchart LR
+    ELB["ELB"] --> E1["AZ 1: EC2"]
+    ELB --> E2["AZ 2: EC2"]
+    ELB --> E3["AZ 3: EC2"]
+
+    E1 --> DB["⭐ Aurora MySQL<br/>• Multi AZ<br/>• Read Replicas"]
+    E2 --> DB
+    E3 --> DB
+
+    ELB -.- ASG["Auto Scaling group"]
 ```
 
 - ⭐⭐ **Nâng cấp lên Aurora MySQL** để có **Multi-AZ và Read Replicas DỄ DÀNG hơn**.
@@ -491,10 +528,11 @@ Tổng kết (nguyên văn slide):
 
 ### 🔹 Bước 3 — Storing images with EBS (single instance) ⭐
 
-```
-   ┌──── Availability zone 1 (Multi AZ) ────┐
-   │   EC2 ──⭐ Send image──► Amazon EBS Volume
-   └─────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph AZ["Availability zone 1 (Multi AZ)"]
+        EC2["EC2"] -->|"⭐ Send image"| EBS["Amazon EBS Volume"]
+    end
 ```
 
 - ✅ **Hoạt động tốt khi CHỈ CÓ MỘT instance**.
@@ -503,15 +541,19 @@ Tổng kết (nguyên văn slide):
 
 ### 🔹 Bước 4 — ⚠️ Vấn đề với EBS khi scale ngang ⭐⭐
 
-```
-   ┌── AZ 1 ──┐              ┌── AZ 2 ──┐
-   │   EC2    │              │   EC2    │
-   │    │     │              │    │     │
-   │ Send image             │ Send image
-   │    ▼     │              │    ▼     │
-   │ EBS Volume A            │ EBS Volume B
-   └──────────┘              └──────────┘
-        ⚠️⭐⭐ Ảnh upload lên instance 1 KHÔNG thấy được từ instance 2!
+```mermaid
+flowchart TD
+    subgraph AZ1["AZ 1"]
+        E1["EC2"] -->|"Send image"| V1["EBS Volume A"]
+    end
+
+    subgraph AZ2["AZ 2"]
+        E2["EC2"] -->|"Send image"| V2["EBS Volume B"]
+    end
+
+    NOTE["⚠️⭐⭐ Ảnh upload lên instance 1 KHÔNG thấy được từ instance 2!"]
+    V1 -.- NOTE
+    V2 -.- NOTE
 ```
 
 ⚠️⭐⭐ **Đây là vấn đề cốt lõi của bài này:**
@@ -523,14 +565,19 @@ Tổng kết (nguyên văn slide):
 
 ### 🔹 Bước 5 — Storing images with EFS ⭐⭐⭐
 
-```
-   ┌── AZ 1 ──┐                      ┌── AZ 2 ──┐
-   │   EC2    │                      │   EC2    │
-   │    │     │                      │    │     │
-   │  ⭐ ENI   │                      │  ⭐ ENI   │
-   └────┼─────┘                      └────┼─────┘
-        └──────────► ⭐ EFS ◄──────────────┘
-                (Send image — dùng chung)
+```mermaid
+flowchart TD
+    subgraph AZ1["AZ 1"]
+        E1["EC2"] --> N1["⭐ ENI"]
+    end
+
+    subgraph AZ2["AZ 2"]
+        E2["EC2"] --> N2["⭐ ENI"]
+    end
+
+    EFS["⭐ EFS<br/>Send image — dùng chung"]
+    N1 --> EFS
+    N2 --> EFS
 ```
 
 - ⭐⭐ **EFS là network file system dùng chung, mount được lên NHIỀU instance XUYÊN AZ**
@@ -617,24 +664,30 @@ Nguyên văn slide:
 
 Đây là **kiến trúc 3 tầng chuẩn** — hình mẫu cho rất nhiều câu hỏi thi:
 
-```
-                          Route 53
-                             │
-   ┌─────────────────── PUBLIC SUBNET ───────────────────┐
-   │                        ELB                           │
-   └─────────────────────────┬────────────────────────────┘
-                             │
-   ┌─────────────────── PRIVATE SUBNET ──────────────────┐
-   │   ⭐ Auto Scaling group                               │
-   │   AZ 1: EC2      AZ 2: EC2      AZ 3: EC2            │
-   └──────────┬───────────────────────────┬───────────────┘
-              │                           │
-   ┌──────────┼────────── DATA SUBNET ────┼───────────────┐
-   │          ▼                           ▼               │
-   │   ⭐ ElastiCache (Multi AZ)    ⭐ Amazon RDS           │
-   │   Store/retrieve session      Read / write data      │
-   │   data + Cached data                                  │
-   └───────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    R53["Route 53"] --> PUB
+
+    subgraph PUB["PUBLIC SUBNET"]
+        ELB["ELB"]
+    end
+
+    ELB --> PRIV
+
+    subgraph PRIV["PRIVATE SUBNET — ⭐ Auto Scaling group"]
+        E1["AZ 1: EC2"]
+        E2["AZ 2: EC2"]
+        E3["AZ 3: EC2"]
+    end
+
+    subgraph DATA["DATA SUBNET"]
+        EC["⭐ ElastiCache (Multi AZ)<br/>Store/retrieve session data + Cached data"]
+        RDS["⭐ Amazon RDS<br/>Read / write data"]
+    end
+
+    E1 --> EC
+    E2 --> RDS
+    E3 --> RDS
 ```
 
 ### ⭐⭐ Ba tầng (3 tiers)
@@ -687,16 +740,13 @@ Những vấn đề developer gặp phải (nguyên văn slide):
 
 ### Quy trình làm việc ⭐
 
-```
-   Create Application ──► Upload Version ──► Launch Environment
-                                                    │
-                              ┌─────────────────────┘
-                              ▼
-                     Manage Environment
-                              │
-              ┌───────────────┴──────────────┐
-              ▼                              ▼
-        update version              deploy new version
+```mermaid
+flowchart TD
+    A["Create Application"] --> B["Upload Version"]
+    B --> C["Launch Environment"]
+    C --> D["Manage Environment"]
+    D --> E["update version"]
+    D --> F["deploy new version"]
 ```
 
 ---
@@ -725,29 +775,27 @@ Những vấn đề developer gặp phải (nguyên văn slide):
 
 #### Web Environment
 
-```
-   myapp.us-east-1.elasticbeanstalk.com
-              │
-             ELB
-              │
-   ┌──── Security Group ────┐
-   │  Auto Scaling group     │
-   │  AZ 1: EC2 (Web Server) │
-   │  AZ 2: EC2 (Web Server) │
-   └─────────────────────────┘
+```mermaid
+flowchart TD
+    URL["myapp.us-east-1.elasticbeanstalk.com"] --> ELB["ELB"]
+    ELB --> SG
+
+    subgraph SG["Security Group — Auto Scaling group"]
+        E1["AZ 1: EC2 (Web Server)"]
+        E2["AZ 2: EC2 (Web Server)"]
+    end
 ```
 
 #### Worker Environment
 
-```
-        ⭐ SQS Queue
-         │  │  │  (SQS messages)
-         ▼  ▼  ▼   ⭐ pull messages
-   ┌──── Security Group ────┐
-   │  Auto Scaling group     │
-   │  AZ 1: EC2 (Worker)     │
-   │  AZ 2: EC2 (Worker)     │
-   └─────────────────────────┘
+```mermaid
+flowchart TD
+    Q["⭐ SQS Queue<br/>(SQS messages)"] -->|"⭐ pull messages"| SG
+
+    subgraph SG["Security Group — Auto Scaling group"]
+        E1["AZ 1: EC2 (Worker)"]
+        E2["AZ 2: EC2 (Worker)"]
+    end
 ```
 
 ### Đặc điểm Worker Tier ⭐⭐
@@ -777,15 +825,29 @@ Những vấn đề developer gặp phải (nguyên văn slide):
 | **Database** | ⭐ **RDS Master** (một mình) | ⭐ **RDS Master + RDS Standby** (Multi-AZ) |
 | **Chi phí** | Thấp | Cao |
 
-```
-   Single Instance (DEV)              High Availability (PROD)
-   ┌── AZ 1 ──────────┐               ┌── AZ 1 ──┐  ┌── AZ 2 ──┐
-   │  Elastic IP       │                     ALB
-   │  EC2 Instance     │               │   EC2    │  │   EC2    │
-   │  RDS Master       │               │          │  │          │
-   └───────────────────┘               │RDS Master│  │RDS Standby│
-                                       └──────────┘  └──────────┘
-                                        ⭐ Auto Scaling Group
+```mermaid
+flowchart TD
+    subgraph DEV["Single Instance (DEV)"]
+        subgraph D1["AZ 1"]
+            EIP["Elastic IP"]
+            E0["EC2 Instance"]
+            M0["RDS Master"]
+        end
+    end
+
+    subgraph PROD["High Availability (PROD) — ⭐ Auto Scaling Group"]
+        ALB["ALB"]
+        subgraph P1["AZ 1"]
+            E1["EC2"]
+            M1["RDS Master"]
+        end
+        subgraph P2["AZ 2"]
+            E2["EC2"]
+            S1["RDS Standby"]
+        end
+        ALB --> E1
+        ALB --> E2
+    end
 ```
 
 > **Mẹo thi:** Đề nhắc **"môi trường dev, tiết kiệm chi phí"** → **Single Instance**. Đề nhắc **"production, high availability"** → **Load Balanced + ASG**.

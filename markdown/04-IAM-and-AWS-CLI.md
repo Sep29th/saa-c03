@@ -66,13 +66,23 @@ Quy tắc quan trọng (rất hay hỏi trong đề thi):
 
 ### Ví dụ mô hình từ slide
 
-```
-Group: Developers          Group: Operations         Group: Audit Team
-├── Alice                  ├── Charles               ├── Charles  (thuộc 2 group)
-├── Bob                    └── David                 └── David    (thuộc 2 group)
-└── Charles
+```mermaid
+flowchart TD
+    DEV["Group: Developers"]
+    OPS["Group: Operations"]
+    AUD["Group: Audit Team"]
 
-Edward, Fred → không thuộc group nào (vẫn hợp lệ)
+    DEV --> Alice["Alice"]
+    DEV --> Bob["Bob"]
+    DEV --> Charles["Charles"]
+
+    OPS --> Charles
+    OPS --> David["David"]
+
+    AUD --> Charles
+    AUD --> David
+
+    NG["Edward, Fred<br/>không thuộc group nào — vẫn hợp lệ"]
 ```
 
 ### Policies (Chính sách)
@@ -796,27 +806,28 @@ Bảng tổng kết toàn bộ phần IAM (trích nguyên từ slide):
 
 ### Sơ đồ ghi nhớ
 
-```
-                    ┌─────────────────────────────────┐
-                    │      AWS Account (Root)         │  ← chỉ dùng để setup
-                    └───────────────┬─────────────────┘
-                                    │
-        ┌───────────────────────────┼───────────────────────────┐
-        │                           │                           │
-    ┌───▼────┐                 ┌────▼────┐                 ┌────▼────┐
-    │ Users  │◄── thuộc về ────│ Groups  │                 │  Roles  │
-    └───┬────┘                 └────┬────┘                 └────┬────┘
-        │                           │                           │
-        └──────────┬────────────────┘                           │
-                   │                                            │
-              ┌────▼──────────────────────────────────────────▼──┐
-              │           IAM Policies (JSON)                    │
-              │  Version / Statement{Effect, Action, Resource}    │
-              └──────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    ROOT["AWS Account (Root)<br/>chỉ dùng để setup"]
+    ROOT --> USERS["Users"]
+    ROOT --> GROUPS["Groups"]
+    ROOT --> ROLES["Roles"]
 
-    Truy cập:  Console (password + MFA)
-               CLI / SDK (access keys)
-               Service → dùng Role (temporary credentials)
+    GROUPS -->|"thuộc về"| USERS
+
+    USERS --> POL["IAM Policies (JSON)<br/>Version / Statement: Effect, Action, Resource"]
+    GROUPS --> POL
+    ROLES --> POL
+
+    subgraph ACCESS["Cách truy cập"]
+        CONSOLE["Console<br/>password + MFA"]
+        CLI["CLI / SDK<br/>access keys"]
+        SVC["AWS Service"]
+    end
+
+    CONSOLE --> USERS
+    CLI --> USERS
+    SVC -->|"temporary credentials"| ROLES
 ```
 
 ---

@@ -55,22 +55,20 @@ Mạng có **hai loại IP**:
 
 ### Sơ đồ minh họa (từ slide)
 
-```
-                    Server (public):          Web Server (public):
-                    211.139.37.43             79.216.59.75
-                            │                        │
-                            └────────  WWW  ─────────┘
-                                    ╱       ╲
-              Internet Gateway     ╱         ╲    Internet Gateway
-              (public):           ╱           ╲   (public):
-              149.140.72.10      ╱             ╲  253.144.139.205
-                    │                                  │
-        ┌───────────────────────┐         ┌───────────────────────┐
-        │      Company A        │         │      Company B        │
-        │   Private Network     │         │   Private Network     │
-        │   192.168.0.1/22      │         │   192.168.0.1/22      │
-        └───────────────────────┘         └───────────────────────┘
-             ▲ Hai công ty dùng CHUNG dải private IP → vẫn hợp lệ!
+```mermaid
+flowchart TD
+    SRV["Server (public)<br/>211.139.37.43"] --- WWW["WWW"]
+    WEB["Web Server (public)<br/>79.216.59.75"] --- WWW
+
+    WWW --- IGWA["Internet Gateway (public)<br/>149.140.72.10"]
+    WWW --- IGWB["Internet Gateway (public)<br/>253.144.139.205"]
+
+    IGWA --- A["Company A<br/>Private Network<br/>192.168.0.1/22"]
+    IGWB --- B["Company B<br/>Private Network<br/>192.168.0.1/22"]
+
+    NOTE["Hai công ty dùng CHUNG dải private IP → vẫn hợp lệ!"]
+    A -.- NOTE
+    B -.- NOTE
 ```
 
 ### Các dải Private IP (RFC 1918)
@@ -229,15 +227,18 @@ Elastic IP **không gắn vào instance nào sẽ bị tính phí**:
 
 ### 1️⃣ Cluster Placement Group
 
-```
-        ┌──────────── Same AZ ─────────────┐
-        │  ┌─────┐ ┌─────┐ ┌─────┐         │
-        │  │ EC2 │ │ EC2 │ │ EC2 │         │   Placement group: Cluster
-        │  └─────┘ └─────┘ └─────┘         │   Low latency
-        │  ┌─────┐ ┌─────┐ ┌─────┐         │   10 Gbps network
-        │  │ EC2 │ │ EC2 │ │ EC2 │         │
-        │  └─────┘ └─────┘ └─────┘         │
-        └──────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph AZ["Same AZ"]
+        E1["EC2"]
+        E2["EC2"]
+        E3["EC2"]
+        E4["EC2"]
+        E5["EC2"]
+        E6["EC2"]
+    end
+
+    AZ -.- INFO["Placement group: Cluster<br/>Low latency<br/>10 Gbps network"]
 ```
 
 **Đặc điểm:** tất cả instance nằm trong **cùng một rack**, **cùng một AZ**.
@@ -254,16 +255,22 @@ Elastic IP **không gắn vào instance nào sẽ bị tính phí**:
 
 ### 2️⃣ Spread Placement Group
 
-```
-   us-east-1a        us-east-1b        us-east-1c
-   ┌─────────┐      ┌─────────┐      ┌─────────┐
-   │  EC2    │      │  EC2    │      │  EC2    │
-   │Hardware1│      │Hardware3│      │Hardware5│
-   └─────────┘      └─────────┘      └─────────┘
-   ┌─────────┐      ┌─────────┐      ┌─────────┐
-   │  EC2    │      │  EC2    │      │  EC2    │
-   │Hardware2│      │Hardware4│      │Hardware6│
-   └─────────┘      └─────────┘      └─────────┘
+```mermaid
+flowchart LR
+    subgraph A["us-east-1a"]
+        A1["EC2<br/>Hardware1"]
+        A2["EC2<br/>Hardware2"]
+    end
+
+    subgraph B["us-east-1b"]
+        B1["EC2<br/>Hardware3"]
+        B2["EC2<br/>Hardware4"]
+    end
+
+    subgraph C["us-east-1c"]
+        C1["EC2<br/>Hardware5"]
+        C2["EC2<br/>Hardware6"]
+    end
 ```
 
 **Đặc điểm:** mỗi instance nằm trên **một phần cứng vật lý riêng biệt**.
@@ -280,15 +287,22 @@ Elastic IP **không gắn vào instance nào sẽ bị tính phí**:
 
 ### 3️⃣ Partition Placement Group
 
-```
-        us-east-1a                         us-east-1b
-  ┌──────────┬──────────┐            ┌──────────┐
-  │ EC2  EC2 │ EC2  EC2 │            │ EC2  EC2 │
-  │ EC2  EC2 │ EC2  EC2 │            │ EC2  EC2 │
-  ├──────────┼──────────┤            ├──────────┤
-  │Partition1│Partition2│            │Partition3│
-  └──────────┴──────────┘            └──────────┘
-   (rack set A) (rack set B)          (rack set C)
+```mermaid
+flowchart LR
+    subgraph AZA["us-east-1a"]
+        subgraph P1["Partition 1 — rack set A"]
+            PA["EC2 EC2<br/>EC2 EC2"]
+        end
+        subgraph P2["Partition 2 — rack set B"]
+            PB["EC2 EC2<br/>EC2 EC2"]
+        end
+    end
+
+    subgraph AZB["us-east-1b"]
+        subgraph P3["Partition 3 — rack set C"]
+            PC["EC2 EC2<br/>EC2 EC2"]
+        end
+    end
 ```
 
 **Đặc điểm (nguyên văn slide):**
@@ -401,19 +415,19 @@ Tạo thử cả 3 loại để xem giao diện khác nhau:
 
 ### Sơ đồ (từ slide)
 
-```
-┌──────────────── Availability Zone ─────────────────┐
-│                                                     │
-│   ┌─────┐   Eth0 – primary ENI                     │
-│   │ EC2 │───  192.168.0.31                          │
-│   │     │                                           │
-│   │     │───  Eth1 – secondary ENI                  │
-│   └─────┘     192.168.0.42  ──┐                     │
-│                               │ Can be moved        │
-│   ┌─────┐   Eth0 – primary ENI│                     │
-│   │ EC2 │◄──────────────────────┘                   │
-│   └─────┘                                           │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph AZ["Availability Zone"]
+        direction LR
+        EC2A["EC2 Instance A"]
+        EC2B["EC2 Instance B"]
+
+        EC2A --- ETH0A["Eth0 – primary ENI<br/>192.168.0.31"]
+        EC2A --- ETH1A["Eth1 – secondary ENI<br/>192.168.0.42"]
+        EC2B --- ETH0B["Eth0 – primary ENI"]
+
+        ETH1A -.->|"Can be moved"| EC2B
+    end
 ```
 
 ### Các loại ENI
@@ -579,15 +593,14 @@ Chúng ta đã biết có thể **stop** và **terminate** instance:
 
 ### Sơ đồ vòng đời (từ slide)
 
-```
-  EC2 Instance          Hibernate         Hibernation      Start
-    Running    ────────►  Stopping  ────────► Stopped  ────────► Running
-     [RAM]                 [RAM]              [RAM đã lưu]        [RAM]
-       │                     │                                      ▲
-       │                     ▼                                      │
-       │              Root EBS Volume ────────────────────────────────
-       └───────────►    (Encrypted)         Shutdown
-                       RAM state file
+```mermaid
+flowchart LR
+    R["EC2 Instance<br/>Running (RAM)"] -->|"Hibernate"| S["Stopping (RAM)"]
+    S --> ST["Stopped<br/>RAM đã được lưu"]
+    ST -->|"Start"| R2["Running<br/>RAM được khôi phục"]
+
+    R -->|"Shutdown: ghi RAM xuống đĩa"| EBS["Root EBS Volume (Encrypted)<br/>RAM state file"]
+    EBS -->|"đọc lại RAM state khi Start"| R2
 ```
 
 ### Use cases ⭐

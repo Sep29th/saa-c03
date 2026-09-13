@@ -105,18 +105,12 @@
 
 **Load Balancers là các server chuyển tiếp traffic tới nhiều server (ví dụ EC2 instances) ở phía sau (downstream).**
 
-```
-              Users
-                │
-                ▼
-      ┌───────────────────┐
-      │ Elastic Load      │
-      │ Balancer          │
-      └─────┬──────┬──────┘
-            │      │      \
-        ┌───▼─┐ ┌──▼──┐ ┌──▼──┐
-        │ EC2 │ │ EC2 │ │ EC2 │
-        └─────┘ └─────┘ └─────┘
+```mermaid
+flowchart TD
+    U["Users"] --> ELB["Elastic Load Balancer"]
+    ELB --> E1["EC2"]
+    ELB --> E2["EC2"]
+    ELB --> E3["EC2"]
 ```
 
 ### Vì sao dùng Load Balancer? ⭐
@@ -151,10 +145,9 @@
 - **Health check được thực hiện trên một PORT và một ROUTE** (**`/health` là phổ biến**).
 - **Nếu response KHÔNG phải 200 (OK) → instance được coi là UNHEALTHY** ⭐
 
-```
-Elastic Load Balancer ──► Protocol: HTTP
-                          Port: 4567
-                          Endpoint: /health   ──► EC2 Instance
+```mermaid
+flowchart LR
+    ELB["Elastic Load Balancer"] -->|"Protocol: HTTP<br/>Port: 4567<br/>Endpoint: /health"| EC2["EC2 Instance"]
 ```
 
 > Instance `unhealthy` sẽ **KHÔNG nhận traffic** cho tới khi health check pass trở lại.
@@ -181,20 +174,10 @@ Elastic Load Balancer ──► Protocol: HTTP
 
 Mô hình bảo mật chuẩn (rất hay ra thi):
 
-```
-   Users
-     │  HTTPS / HTTP
-     │  From anywhere (0.0.0.0/0)
-     ▼
-┌──────────────────┐
-│  LOAD BALANCER   │  ← Load Balancer Security Group:
-└────────┬─────────┘     Allow HTTP/HTTPS from ANYWHERE
-         │
-         │  HTTP Restricted to Load Balancer
-         ▼
-     ┌───────┐
-     │  EC2  │  ← Application Security Group:
-     └───────┘     Allow traffic ONLY FROM Load Balancer
+```mermaid
+flowchart TD
+    U["Users"] -->|"HTTPS / HTTP<br/>From anywhere (0.0.0.0/0)"| LB["LOAD BALANCER<br/>Load Balancer Security Group:<br/>Allow HTTP/HTTPS from ANYWHERE"]
+    LB -->|"HTTP — Restricted to Load Balancer"| EC2["EC2<br/>Application Security Group:<br/>Allow traffic ONLY FROM Load Balancer"]
 ```
 
 | Security Group | Rule |
@@ -212,8 +195,10 @@ Mô hình bảo mật chuẩn (rất hay ra thi):
 - **Health checks dựa trên TCP hoặc HTTP**
 - **Hostname cố định: `XXX.region.elb.amazonaws.com`**
 
-```
-Client ──listener──► CLB ──internal──► EC2
+```mermaid
+flowchart LR
+    C["Client"] -->|"listener"| CLB["CLB"]
+    CLB -->|"internal"| EC2["EC2"]
 ```
 
 > CLB đã lỗi thời, chỉ cần biết khái niệm cơ bản và các hạn chế của nó (đặc biệt: **chỉ hỗ trợ MỘT SSL certificate**).
@@ -248,10 +233,12 @@ ALB có thể định tuyến dựa trên:
 
 ### Sơ đồ HTTP Based Traffic
 
-```
-  WWW ──Route /user───┐
-                      ├──► External ALB (v2) ──Health Check──► Target Group for Users app
-  WWW ──Route /search─┘                      ──Health Check──► Target Group for Search app
+```mermaid
+flowchart LR
+    W1["WWW"] -->|"Route /user"| ALB["External ALB (v2)"]
+    W2["WWW"] -->|"Route /search"| ALB
+    ALB -->|"Health Check"| TG1["Target Group for Users app"]
+    ALB -->|"Health Check"| TG2["Target Group for Search app"]
 ```
 
 ---
@@ -274,10 +261,12 @@ ALB có thể route tới các loại target sau:
 
 ### Ví dụ: Query String / Parameters Routing
 
-```
-  WWW ──?Platform=Mobile───┐
-       Requests            ├──► External ALB ──► Target Group 1: AWS – EC2 based
-       ──?Platform=Desktop─┘                 ──► Target Group 2: On-premises – Private IP routing
+```mermaid
+flowchart LR
+    W1["WWW Requests"] -->|"?Platform=Mobile"| ALB["External ALB"]
+    W2["WWW Requests"] -->|"?Platform=Desktop"| ALB
+    ALB --> TG1["Target Group 1<br/>AWS – EC2 based"]
+    ALB --> TG2["Target Group 2<br/>On-premises – Private IP routing"]
 ```
 
 > Đây là cách **kiến trúc hybrid**: một phần traffic đi tới EC2 trên AWS, một phần đi tới hệ thống on-premises qua private IP.
@@ -291,12 +280,11 @@ ALB có thể route tới các loại target sau:
 - **IP thật của client được chèn vào header `X-Forwarded-For`** ⭐⭐
 - **Cũng lấy được Port qua `X-Forwarded-Port` và protocol qua `X-Forwarded-Proto`**
 
-```
-Client IP              Load Balancer IP
-12.34.56.78  ────────► (Private IP)  ──connection termination──►  EC2 Instance
-                                                                   thấy IP của LB,
-                                                                   không thấy 12.34.56.78
-                                                     → phải đọc header X-Forwarded-For
+```mermaid
+flowchart LR
+    C["Client IP<br/>12.34.56.78"] --> LB["Load Balancer<br/>(Private IP)"]
+    LB -->|"connection termination"| EC2["EC2 Instance<br/>chỉ thấy IP của LB,<br/>không thấy 12.34.56.78"]
+    EC2 -.- NOTE["→ phải đọc header X-Forwarded-For"]
 ```
 
 > **Câu hỏi kinh điển:** "Ứng dụng sau ALB cần biết IP thật của client — làm thế nào?" → **Đọc header `X-Forwarded-For`**.
@@ -456,10 +444,12 @@ Client IP              Load Balancer IP
 
 ### Sơ đồ TCP (Layer 4) Based Traffic
 
-```
-  WWW ──TCP + Rules──┐
-                     ├──► External NLB (v2) ──Health Check──► Target Group for Users app
-  WWW ──TCP + Rules──┘                      ──Health Check──► Target Group for Search app
+```mermaid
+flowchart LR
+    W1["WWW"] -->|"TCP + Rules"| NLB["External NLB (v2)"]
+    W2["WWW"] -->|"TCP + Rules"| NLB
+    NLB -->|"Health Check"| TG1["Target Group for Users app"]
+    NLB -->|"Health Check"| TG2["Target Group for Search app"]
 ```
 
 ---
@@ -474,10 +464,11 @@ Client IP              Load Balancer IP
 
 - **Health Checks hỗ trợ các giao thức TCP, HTTP và HTTPS** ⭐
 
-```
-   NLB ──► Target Group (EC2 Instances):  i-1234567890abcdef0, i-1234567890abcdef0
-   NLB ──► Target Group (IP Addresses):   192.168.1.118, 10.0.4.21
-   NLB ──► Target Group (Application Load Balancer)
+```mermaid
+flowchart LR
+    NLB["NLB"] --> TG1["Target Group (EC2 Instances)<br/>i-1234567890abcdef0, i-1234567890abcdef0"]
+    NLB --> TG2["Target Group (IP Addresses)<br/>192.168.1.118, 10.0.4.21"]
+    NLB --> TG3["Target Group (Application Load Balancer)"]
 ```
 
 > **Mẹo kiến trúc:** Đặt **NLB trước ALB** → có được **static IP của NLB** kết hợp với **routing Layer 7 của ALB**. Đây là câu trả lời cho: *"cần static IP nhưng cũng cần routing theo path/hostname"*.
@@ -582,18 +573,12 @@ nslookup DemoNLB-abc123.elb.eu-west-3.amazonaws.com
 
 ### Sơ đồ luồng traffic
 
-```
-   Users              Route              ┌──────────────────┐        Application
-  (source) ──traffic──► Table ──────────►│ Gateway          │──────► (destination)
-                                          │ Load Balancer    │
-                                          └────────┬─────────┘
-                                                   │
-                                          ┌────────▼─────────┐
-                                          │  Target Group    │
-                                          │ 3rd Party        │
-                                          │ Security Virtual │
-                                          │ Appliances       │
-                                          └──────────────────┘
+```mermaid
+flowchart LR
+    U["Users (source)"] -->|"traffic"| RT["Route Table"]
+    RT --> GWLB["Gateway Load Balancer"]
+    GWLB --> APP["Application (destination)"]
+    GWLB --> TG["Target Group<br/>3rd Party Security<br/>Virtual Appliances"]
 ```
 
 **Luồng hoạt động:** Traffic từ user **KHÔNG đi thẳng** tới ứng dụng. **Route Table** chuyển hướng nó qua **GWLB** → GWLB gửi tới **các security appliance để kiểm tra** → nếu hợp lệ, traffic mới được chuyển tiếp tới ứng dụng.
@@ -631,15 +616,14 @@ nslookup DemoNLB-abc123.elb.eu-west-3.amazonaws.com
 - **Use case: đảm bảo người dùng KHÔNG MẤT dữ liệu session của họ** ⭐
 - ⚠️ **Bật stickiness CÓ THỂ gây MẤT CÂN BẰNG tải trên các EC2 instance phía sau** ⭐
 
-```
-   Client 1        Client 2        Client 3
-      │               │               │
-      └───────┐       │       ┌───────┘
-              ▼       ▼       ▼
-        ┌──────────┐   ┌──────────┐
-        │   EC2    │   │   EC2    │
-        └──────────┘   └──────────┘
-        (Client 1 & 2)   (Client 3)   ← tải không đều
+```mermaid
+flowchart TD
+    C1["Client 1"] --> E1["EC2<br/>(phục vụ Client 1 và 2)"]
+    C2["Client 2"] --> E1
+    C3["Client 3"] --> E2["EC2<br/>(phục vụ Client 3)"]
+
+    E1 -.- NOTE["Tải không đều"]
+    E2 -.- NOTE
 ```
 
 ---
@@ -686,30 +670,58 @@ Target Groups → chọn target group → tab **Attributes** → **Edit**:
 
 > **Mỗi load balancer instance phân phối ĐỀU tới TẤT CẢ các instance đã đăng ký trong TẤT CẢ các AZ.**
 
-```
-        AZ 1 (2 instances)              AZ 2 (8 instances)
-   50% traffic ──┐                    50% traffic ──┐
-                 ▼                                   ▼
-           ┌────┬────┐            ┌──┬──┬──┬──┬──┬──┬──┬──┐
-           │10% │10% │            │10│10│10│10│10│10│10│10│
-           └────┴────┘            └──┴──┴──┴──┴──┴──┴──┴──┘
+```mermaid
+flowchart TD
+    LB["Load Balancer<br/>Cross-Zone Load Balancing: BẬT"]
+    LB -->|"50% traffic"| AZ1
+    LB -->|"50% traffic"| AZ2
 
-   → MỌI instance nhận 10% → CÂN BẰNG HOÀN HẢO ✅
+    subgraph AZ1["AZ 1 — 2 instances"]
+        A1["10%"]
+        A2["10%"]
+    end
+
+    subgraph AZ2["AZ 2 — 8 instances"]
+        B1["10%"]
+        B2["10%"]
+        B3["10%"]
+        B4["10%"]
+        B5["10%"]
+        B6["10%"]
+        B7["10%"]
+        B8["10%"]
+    end
+
+    NOTE["MỌI instance nhận 10% → CÂN BẰNG HOÀN HẢO ✅"]
 ```
 
 #### ❌ **KHÔNG có Cross Zone Load Balancing:**
 
 > **Request được phân phối trong các instance của NODE (thuộc AZ đó) của Elastic Load Balancer.**
 
-```
-        AZ 1 (2 instances)              AZ 2 (8 instances)
-   50% traffic ──┐                    50% traffic ──┐
-                 ▼                                   ▼
-           ┌────┬────┐            ┌────┬────┬────┬────┬────┬────┬────┬────┐
-           │25% │25% │            │6.25│6.25│6.25│6.25│6.25│6.25│6.25│6.25│
-           └────┴────┘            └────┴────┴────┴────┴────┴────┴────┴────┘
+```mermaid
+flowchart TD
+    LB["Load Balancer<br/>Cross-Zone Load Balancing: TẮT"]
+    LB -->|"50% traffic"| AZ1
+    LB -->|"50% traffic"| AZ2
 
-   → Instance ở AZ 1 nhận 25%, ở AZ 2 chỉ nhận 6.25% → MẤT CÂN BẰNG ❌
+    subgraph AZ1["AZ 1 — 2 instances"]
+        A1["25%"]
+        A2["25%"]
+    end
+
+    subgraph AZ2["AZ 2 — 8 instances"]
+        B1["6.25%"]
+        B2["6.25%"]
+        B3["6.25%"]
+        B4["6.25%"]
+        B5["6.25%"]
+        B6["6.25%"]
+        B7["6.25%"]
+        B8["6.25%"]
+    end
+
+    NOTE["Instance ở AZ 1 nhận 25%, ở AZ 2 chỉ nhận 6.25% → MẤT CÂN BẰNG ❌"]
 ```
 
 > **Điểm mấu chốt:** Không có Cross-Zone, traffic chia đều **theo AZ**, không phải **theo instance**. AZ ít instance hơn → mỗi instance chịu tải nặng hơn.
@@ -752,8 +764,10 @@ CLB   → TẮT sẵn, MIỄN PHÍ          (cũ nhưng miễn phí)
 
 ### Mô hình mã hóa
 
-```
-   Users ──HTTPS (encrypted) over WWW──► LOAD BALANCER ──HTTP over private VPC──► EC2 Instance
+```mermaid
+flowchart LR
+    U["Users"] -->|"HTTPS (encrypted) over WWW"| LB["LOAD BALANCER"]
+    LB -->|"HTTP over private VPC"| EC2["EC2 Instance"]
 ```
 
 > **Điểm quan trọng:** Traffic từ user tới LB được **mã hóa**; từ LB tới EC2 có thể là **HTTP thường** vì đã nằm trong **private VPC**. Đây gọi là **SSL Termination** (kết thúc SSL tại load balancer).
@@ -788,18 +802,13 @@ CLB   → TẮT sẵn, MIỄN PHÍ          (cũ nhưng miễn phí)
 
 ### Sơ đồ SNI
 
-```
-                          "Tôi muốn www.mycorp.com"
-   Client ──────────────────────────────────────────►  ALB
-                                                        │
-                                    ┌───────────────────┴───────────────────┐
-                                    │  Chọn ĐÚNG SSL cert                    │
-                                    ▼                                        ▼
-                        SSL Cert: www.mycorp.com          SSL Cert: Domain1.example.com
-                                    │                                        │
-                                    ▼                                        ▼
-                        Target group for                      Target group for
-                        www.mycorp.com                        Domain1.example.com
+```mermaid
+flowchart TD
+    C["Client"] -->|"Tôi muốn www.mycorp.com (SNI)"| ALB["ALB<br/>Chọn ĐÚNG SSL cert"]
+    ALB --> C1["SSL Cert: www.mycorp.com"]
+    ALB --> C2["SSL Cert: Domain1.example.com"]
+    C1 --> T1["Target group for<br/>www.mycorp.com"]
+    C2 --> T2["Target group for<br/>Domain1.example.com"]
 ```
 
 ---
@@ -894,16 +903,12 @@ CLB   → TẮT sẵn, MIỄN PHÍ          (cũ nhưng miễn phí)
 
 ### Sơ đồ
 
-```
-                          ┌─────────────────────────────┐
-   Users ──────► ELB ────►│ EC2 Instance  [DRAINING]    │
-                    │      │ waiting for existing        │
-                    │      │ connections to complete     │
-                    │      └─────────────────────────────┘
-                    │
-                    │  new connections established
-                    ├─────────► EC2 Instance
-                    └─────────► EC2 Instance
+```mermaid
+flowchart LR
+    U["Users"] --> ELB["ELB"]
+    ELB -->|"chờ kết nối cũ kết thúc"| D["EC2 Instance — DRAINING<br/>waiting for existing<br/>connections to complete"]
+    ELB -->|"new connections established"| E1["EC2 Instance"]
+    ELB -->|"new connections established"| E2["EC2 Instance"]
 ```
 
 ### Ứng dụng thực tế
@@ -939,19 +944,16 @@ CLB   → TẮT sẵn, MIỄN PHÍ          (cũ nhưng miễn phí)
 
 ### Auto Scaling Group trong AWS
 
-```
-┌───────────────── Auto Scaling Group ─────────────────┐
-│                                                       │
-│  ┌───┐ ┌───┐  ← Minimum Capacity (tối thiểu)         │
-│  │EC2│ │EC2│                                          │
-│  └───┘ └───┘                                          │
-│  ┌───┐ ┌───┐  ← Desired Capacity (mong muốn)         │
-│  │EC2│ │EC2│                                          │
-│  └───┘ └───┘                                          │
-│  ┌───┐ ┌───┐  ← Maximum Capacity (tối đa)            │
-│  │EC2│ │EC2│        ▲                                 │
-│  └───┘ └───┘   Scale Out as Needed                    │
-└───────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph ASG["Auto Scaling Group"]
+        MIN["Minimum Capacity (tối thiểu)<br/>EC2 EC2"]
+        DES["Desired Capacity (mong muốn)<br/>EC2 EC2"]
+        MAX["Maximum Capacity (tối đa)<br/>EC2 EC2"]
+
+        MIN --> DES
+        DES -->|"Scale Out as Needed"| MAX
+    end
 ```
 
 ### Ba thông số dung lượng ⭐⭐
@@ -968,20 +970,20 @@ CLB   → TẮT sẵn, MIỄN PHÍ          (cũ nhưng miễn phí)
 
 ### ASG kết hợp với Load Balancer ⭐
 
-```
-                        Users
-                          │
-                          ▼
-            ┌───────────────────────────┐
-            │  Elastic Load Balancer    │  ⭐ ELB có thể kiểm tra
-            └────┬──────┬──────┬────────┘     sức khỏe EC2 instances!
-                 │      │      │
-    ┌────────────▼──────▼──────▼──────────────┐
-    │        Auto Scaling Group                │
-    │  ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐   │
-    │  │EC2│ │EC2│ │EC2│ │EC2│ │EC2│ │EC2│   │
-    │  └───┘ └───┘ └───┘ └───┘ └───┘ └───┘   │
-    └──────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    U["Users"] --> ELB["Elastic Load Balancer<br/>⭐ ELB có thể kiểm tra sức khỏe EC2 instances!"]
+
+    ELB --> ASG
+
+    subgraph ASG["Auto Scaling Group"]
+        E1["EC2"]
+        E2["EC2"]
+        E3["EC2"]
+        E4["EC2"]
+        E5["EC2"]
+        E6["EC2"]
+    end
 ```
 
 > **ELB có thể kiểm tra sức khỏe (health) của các EC2 instance!** ⭐
@@ -1012,12 +1014,18 @@ Launch Template chứa:
 
 #### 3. Scaling Policies
 
-```
-        ┌────────── ASG Launch Template ──────────┐
-        │  AMI    Instance Type    SSH Key Pair    │
-        │  Security Groups   EBS Volumes  IAM Role │
-        │  VPC + Subnets     Load Balancer   …     │
-        └──────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    LT["ASG Launch Template"]
+    LT --> A["AMI"]
+    LT --> B["Instance Type"]
+    LT --> C["SSH Key Pair"]
+    LT --> D["Security Groups"]
+    LT --> E["EBS Volumes"]
+    LT --> F["IAM Role"]
+    LT --> G["VPC + Subnets"]
+    LT --> H["Load Balancer"]
+    LT --> I["…"]
 ```
 
 > **Ghi nhớ thi:** Nếu đề nhắc **"Launch Configuration"** → đó là **công nghệ cũ đã deprecated**, câu trả lời đúng thường là **Launch Template**.
@@ -1033,13 +1041,17 @@ Launch Template chứa:
   - **Tạo scale-out policies** (tăng số lượng instance)
   - **Tạo scale-in policies** (giảm số lượng instance)
 
-```
-┌────── Auto Scaling Group ──────┐
-│ ┌───┐ ┌───┐ ┌───┐ ┌───┐ ┌───┐ │      ┌──────────────┐
-│ │EC2│ │EC2│ │EC2│ │EC2│ │EC2│ │◄─────│ CloudWatch   │
-│ └───┘ └───┘ └───┘ └───┘ └───┘ │      │ Alarm        │
-└────────────────────────────────┘      └──────────────┘
-              trigger Scaling
+```mermaid
+flowchart LR
+    CW["CloudWatch Alarm"] -->|"trigger Scaling"| ASG
+
+    subgraph ASG["Auto Scaling Group"]
+        E1["EC2"]
+        E2["EC2"]
+        E3["EC2"]
+        E4["EC2"]
+        E5["EC2"]
+    end
 ```
 
 ---
@@ -1132,13 +1144,14 @@ Launch Template chứa:
 
 ### Tổng quan các loại Scaling Policy ⭐⭐
 
-```
-Scaling Policies
-├── Dynamic Scaling
-│   ├── Target Tracking Scaling
-│   └── Simple / Step Scaling
-├── Scheduled Scaling
-└── Predictive Scaling
+```mermaid
+flowchart LR
+    SP["Scaling Policies"]
+    SP --> DYN["Dynamic Scaling"]
+    DYN --> TT["Target Tracking Scaling"]
+    DYN --> SS["Simple / Step Scaling"]
+    SP --> SCH["Scheduled Scaling"]
+    SP --> PRE["Predictive Scaling"]
 ```
 
 ---
@@ -1209,15 +1222,10 @@ Các metric tốt để scale (rất hay ra thi):
 | **Average Network In / Out** | Nếu ứng dụng của bạn **bị giới hạn bởi mạng (network bound)** |
 | **Any custom metric** | Bất kỳ metric tùy chỉnh nào bạn **push qua CloudWatch** |
 
-```
-   Users
-     │
-     ▼
-  Application Load Balancer
-     │  RequestCountPerTarget
-     │  Target Value: 3
-     ▼
-  Auto Scaling group
+```mermaid
+flowchart TD
+    U["Users"] --> ALB["Application Load Balancer"]
+    ALB -->|"RequestCountPerTarget<br/>Target Value: 3"| ASG["Auto Scaling group"]
 ```
 
 > **Ghi nhớ:** `RequestCountPerTarget` là metric **đặc trưng của ALB** — đề hỏi "scale theo số request mỗi instance" → chính là nó.
@@ -1229,17 +1237,11 @@ Các metric tốt để scale (rất hay ra thi):
 - **Sau khi một hoạt động scaling xảy ra, bạn ở trong COOLDOWN PERIOD (mặc định 300 giây)** ⭐
 - **Trong cooldown period, ASG sẽ KHÔNG launch hoặc terminate thêm instance nào** (để **các metric có thời gian ổn định lại**) ⭐
 
-```
-   Scaling Action Occurs
-            │
-            ▼
-   ┌──────────────────────┐
-   │ Default Cooldown     │ ── Yes ──► Ignore Action
-   │ in effect?           │
-   └──────────┬───────────┘
-              │ No
-              ▼
-   Launch or Terminate Instance
+```mermaid
+flowchart TD
+    S["Scaling Action Occurs"] --> Q{"Default Cooldown<br/>in effect?"}
+    Q -->|"Yes"| IG["Ignore Action"]
+    Q -->|"No"| L["Launch or Terminate Instance"]
 ```
 
 ### ⭐ Lời khuyên từ slide

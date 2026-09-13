@@ -206,12 +206,12 @@ Giải thích từng dòng:
 
 ### Quy ước đặt tên của AWS ⭐
 
-```
-m5.2xlarge
-│ │  └──── size: kích thước trong nhóm (nano, micro, small, medium,
-│ │              large, xlarge, 2xlarge, 4xlarge, …)
-│ └─────── generation: thế hệ (AWS cải tiến theo thời gian)
-└───────── instance class: nhóm instance (m = general purpose)
+```mermaid
+flowchart LR
+    N["m5.2xlarge"]
+    N --> C["m — instance class<br/>nhóm instance (m = general purpose)"]
+    N --> G["5 — generation<br/>thế hệ, AWS cải tiến theo thời gian"]
+    N --> S["2xlarge — size<br/>nano, micro, small, medium,<br/>large, xlarge, 2xlarge, 4xlarge, …"]
 ```
 
 - **`m`** — instance class (nhóm)
@@ -312,19 +312,20 @@ Security Group hoạt động như **tường lửa** trên EC2 instance, điề
 
 ### Sơ đồ hoạt động
 
-```
-                      ┌─────────────────────────┐
-Máy bạn (IP X.X.X.X)  │  Security Group 1       │
-   ── port 22 ───────►│  INBOUND                │──►  EC2 Instance
-   (được cho phép)    │  Lọc IP/Port bằng Rules │      IP X.X.X.X
-                      └─────────────────────────┘
-Máy khác
-   ── port 22 ───X    (không được cho phép → bị chặn)
+```mermaid
+flowchart LR
+    subgraph IN["Chiều INBOUND"]
+        direction LR
+        ME["Máy bạn<br/>IP X.X.X.X"] -->|"port 22 — ✅ được cho phép"| SG1["Security Group 1<br/>INBOUND<br/>Lọc IP/Port bằng Rules"]
+        OTHER["Máy khác"] -.->|"port 22 — ❌ bị chặn"| SG1
+        SG1 --> EC2["EC2 Instance<br/>IP X.X.X.X"]
+    end
 
-                      ┌─────────────────────────┐
-EC2 Instance ────────►│  Security Group 1       │──►  WWW
-                      │  OUTBOUND               │     (Any IP – Any Port)
-                      └─────────────────────────┘
+    subgraph OUT["Chiều OUTBOUND"]
+        direction LR
+        EC2B["EC2 Instance"] --> SG1B["Security Group 1<br/>OUTBOUND"]
+        SG1B --> WWW["WWW<br/>Any IP – Any Port"]
+    end
 ```
 
 ### Những điều cần biết (Good to know) ⭐
@@ -349,11 +350,15 @@ EC2 Instance ────────►│  Security Group 1       │──►
 
 Thay vì mở theo IP, bạn có thể cho phép traffic từ **các instance mang một Security Group cụ thể**:
 
-```
-Security Group 1 (INBOUND):
-  ├── Authorising Security Group 1  → EC2 gắn SG1 ── port 123 ──► ✅ được phép
-  └── Authorising Security Group 2  → EC2 gắn SG2 ── port 123 ──► ✅ được phép
-                                       EC2 gắn SG3 ── port 123 ──► ❌ bị chặn
+```mermaid
+flowchart LR
+    SG1["Security Group 1<br/>INBOUND rules"]
+    SG1 --> A1["Authorising Security Group 1"]
+    SG1 --> A2["Authorising Security Group 2"]
+
+    A1 -->|"port 123 — ✅ được phép"| E1["EC2 gắn SG1"]
+    A2 -->|"port 123 — ✅ được phép"| E2["EC2 gắn SG2"]
+    SG1 -.->|"port 123 — ❌ bị chặn"| E3["EC2 gắn SG3"]
 ```
 
 **Lợi ích:** không cần biết IP của các instance — rất hữu ích khi dùng Load Balancer + Auto Scaling (IP thay đổi liên tục).

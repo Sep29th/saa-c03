@@ -91,10 +91,12 @@
 
 ### ⭐⭐ Key = prefix + object name
 
-```
-   s3://my-bucket/my_folder1/another_folder/my_file.txt
-                  └──────────┬───────────┘ └────┬────┘
-                          PREFIX             OBJECT NAME
+```mermaid
+flowchart LR
+    K["s3://my-bucket/my_folder1/another_folder/my_file.txt"]
+    K --> B["my-bucket<br/>BUCKET"]
+    K --> P["my_folder1/another_folder/<br/>PREFIX"]
+    K --> O["my_file.txt<br/>OBJECT NAME"]
 ```
 
 ### ⭐⭐ Không có khái niệm "thư mục" trong bucket!
@@ -255,28 +257,34 @@ S3 có **2 nhóm cơ chế bảo mật**:
 
 #### 1️⃣ Public Access — Use Bucket Policy
 
-```
-   Anonymous www website visitor ──► [S3 Bucket Policy Allows Public Access] ──► S3 Bucket
+```mermaid
+flowchart LR
+    V["Anonymous www website visitor"] --> P["S3 Bucket Policy<br/>Allows Public Access"]
+    P --> B["S3 Bucket"]
 ```
 
 #### 2️⃣ User Access to S3 — IAM permissions
 
-```
-   IAM User ──[IAM Policy]──► S3 Bucket
+```mermaid
+flowchart LR
+    U["IAM User"] -->|"IAM Policy"| B["S3 Bucket"]
 ```
 
 #### 3️⃣ EC2 instance access — Use IAM Roles
 
-```
-   EC2 Instance ──[EC2 Instance Role + IAM permissions]──► S3 Bucket
+```mermaid
+flowchart LR
+    E["EC2 Instance"] -->|"EC2 Instance Role + IAM permissions"| B["S3 Bucket"]
 ```
 
 > ⭐ Nhắc lại từ phần 4: **KHÔNG BAO GIỜ** lưu access key trên EC2 — luôn dùng **IAM Role**.
 
 #### 4️⃣ Cross-Account Access — Use Bucket Policy ⭐⭐
 
-```
-   IAM User (Other AWS account) ──► [S3 Bucket Policy Allows Cross-Account] ──► S3 Bucket
+```mermaid
+flowchart LR
+    U["IAM User<br/>(Other AWS account)"] --> P["S3 Bucket Policy<br/>Allows Cross-Account"]
+    P --> B["S3 Bucket"]
 ```
 
 > ⭐⭐ **Ghi nhớ:** Truy cập **cross-account** → **PHẢI dùng Bucket Policy** (IAM Policy một mình không đủ).
@@ -464,12 +472,13 @@ Các file dùng trong bài: **`index.html`** và **`coffee.jpg`**.
   - ⭐ **Bảo vệ khỏi việc XÓA NHẦM (unintended deletes)** — có thể khôi phục một version
   - ⭐ **DỄ DÀNG roll back về version trước**
 
-```
-   User ──upload──► S3 Bucket (my-bucket)
-                     s3://my-bucket/my-file.docx
-                        ├── Version 1
-                        ├── Version 2
-                        └── Version 3
+```mermaid
+flowchart TD
+    U["User"] -->|"upload"| B["S3 Bucket (my-bucket)"]
+    B --> K["s3://my-bucket/my-file.docx"]
+    K --> V1["Version 1"]
+    K --> V2["Version 2"]
+    K --> V3["Version 3"]
 ```
 
 ### ⭐⭐ Notes (2 điểm rất hay ra thi)
@@ -557,8 +566,9 @@ Các file dùng trong bài: **`index.html`** và **`coffee.jpg`**.
 - ⭐⭐ **Việc sao chép là BẤT ĐỒNG BỘ (asynchronous)**
 - ⭐⭐ **PHẢI cấp quyền IAM phù hợp cho S3**
 
-```
-   S3 Bucket (eu-west-1) ──⭐ asynchronous replication──► S3 Bucket (us-east-2)
+```mermaid
+flowchart LR
+    A["S3 Bucket (eu-west-1)"] -->|"⭐ asynchronous replication"| B["S3 Bucket (us-east-2)"]
 ```
 
 ### ⭐⭐⭐ Use cases (rất hay ra thi)
@@ -600,9 +610,11 @@ SRR → cùng Region: gom log từ nhiều bucket, đồng bộ prod ↔ test
 > **Nếu bucket 1 có replication sang bucket 2, và bucket 2 có replication sang bucket 3,**
 > **thì các object được tạo trong bucket 1 KHÔNG được sao chép sang bucket 3.**
 
-```
-   Bucket 1 ──replication──► Bucket 2 ──replication──► Bucket 3
-       └──────────────── ❌ KHÔNG tự động tới Bucket 3 ─────────┘
+```mermaid
+flowchart LR
+    B1["Bucket 1"] -->|"replication"| B2["Bucket 2"]
+    B2 -->|"replication"| B3["Bucket 3"]
+    B1 -.->|"❌ KHÔNG tự động tới Bucket 3"| B3
 ```
 
 ### Bảng tóm tắt để ôn nhanh ⭐⭐
@@ -932,12 +944,12 @@ Tham khảo: `https://aws.amazon.com/s3/pricing/`
 
 ### Tên Directory Bucket ⭐
 
-```
-   Region (us-east-1)
-      └── Availability Zone (AZ 4)
-             └── stephane--use1-az4--x-s3
-                          └────┬────┘ └─┬─┘
-                           mã AZ      suffix bắt buộc
+```mermaid
+flowchart TD
+    R["Region (us-east-1)"] --> AZ["Availability Zone (AZ 4)"]
+    AZ --> N["stephane--use1-az4--x-s3"]
+    N --> C1["use1-az4<br/>mã AZ"]
+    N --> C2["--x-s3<br/>suffix bắt buộc"]
 ```
 
 > ⭐ Tên directory bucket có dạng đặc biệt: `<base-name>--<az-id>--x-s3`

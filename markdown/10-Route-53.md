@@ -43,12 +43,12 @@
 - ⭐ **DNS là XƯƠNG SỐNG của Internet**
 - ⭐ **DNS dùng cấu trúc đặt tên PHÂN CẤP (hierarchical naming structure)**
 
-```
-   .              ← Root
-   └── .com       ← TLD
-       └── example.com          ← SLD
-           ├── www.example.com   ← Sub Domain
-           └── api.example.com
+```mermaid
+flowchart TD
+    ROOT["&quot;.&quot; — Root"] --> TLD[".com — TLD"]
+    TLD --> SLD["example.com — SLD"]
+    SLD --> S1["www.example.com — Sub Domain"]
+    SLD --> S2["api.example.com — Sub Domain"]
 ```
 
 ---
@@ -66,12 +66,14 @@
 
 ### Phân rã một URL đầy đủ ⭐
 
-```
-   http:// api . www . example . com .
-   └─┬──┘  └┬┘  └┬┘  └──┬───┘ └┬┘ └┬┘
-  Protocol  │  Sub Domain  SLD  TLD Root
-            └──────────────────────────┘
-              FQDN (Fully Qualified Domain Name)
+```mermaid
+flowchart LR
+    FQDN["http://api.www.example.com.<br/>FQDN (Fully Qualified Domain Name)"]
+    FQDN --> P["http:// — Protocol"]
+    FQDN --> SUB["api . www — Sub Domain"]
+    FQDN --> SLD["example — SLD"]
+    FQDN --> TLD["com — TLD"]
+    FQDN --> ROOT["&quot;.&quot; — Root"]
 ```
 
 > ⭐ **FQDN = Fully Qualified Domain Name** — tên miền đầy đủ, bao gồm cả dấu chấm root ở cuối.
@@ -80,25 +82,24 @@
 
 ### How DNS Works ⭐⭐ (quy trình phân giải)
 
-```
-  Web Browser                Local DNS Server        Root DNS Server
-  (muốn vào example.com)     (do công ty bạn hoặc    (Managed by ICANN)
-        │                     ISP cấp phát)                 │
-        │ ① example.com? ──────►│                           │
-        │                       │ ② example.com? ──────────►│
-        │                       │◄── .com NS 1.2.3.4 ───────│
-        │                       │
-        │                       │ ③ example.com? ──────────► TLD DNS Server (.com)
-        │                       │                            (Managed by IANA
-        │                       │◄── example.com NS 5.6.7.8   — nhánh của ICANN)
-        │                       │
-        │                       │ ④ example.com? ──────────► SLD DNS Server
-        │                       │                            (example.com)
-        │                       │◄── example.com IP           (Managed by Domain
-        │                       │    9.10.11.12                Registrar, ví dụ
-        │◄── 9.10.11.12 + TTL ──│                              Amazon Registrar, Inc.)
-        │
-        └──────────► Web Server (example.com) IP: 9.10.11.12
+```mermaid
+sequenceDiagram
+    participant B as Web Browser<br/>(muốn vào example.com)
+    participant L as Local DNS Server<br/>(do công ty bạn hoặc ISP cấp phát)
+    participant R as Root DNS Server<br/>(Managed by ICANN)
+    participant T as TLD DNS Server (.com)<br/>(Managed by IANA – nhánh của ICANN)
+    participant S as SLD DNS Server (example.com)<br/>(Managed by Domain Registrar)
+    participant W as Web Server (example.com)
+
+    B->>L: ① example.com?
+    L->>R: ② example.com?
+    R-->>L: .com NS 1.2.3.4
+    L->>T: ③ example.com?
+    T-->>L: example.com NS 5.6.7.8
+    L->>S: ④ example.com?
+    S-->>L: example.com IP 9.10.11.12
+    L-->>B: 9.10.11.12 + TTL
+    B->>W: HTTP request tới 9.10.11.12
 ```
 
 ### Ai quản lý cái gì ⭐
@@ -125,11 +126,11 @@
 - ⭐⭐ **Là dịch vụ AWS DUY NHẤT cung cấp SLA sẵn sàng 100%**
 - ⭐ **Vì sao tên là "Route 53"? — 53 là tham chiếu tới PORT DNS truyền thống**
 
-```
-   Client ──example.com?──► Amazon Route 53
-          ◄── 54.22.33.44 ──┘
-          │
-          └──────────► AWS Cloud: EC2 Instance (Public IP 54.22.33.44)
+```mermaid
+flowchart LR
+    C["Client"] -->|"example.com?"| R53["Amazon Route 53"]
+    R53 -->|"54.22.33.44"| C
+    C --> EC2["AWS Cloud: EC2 Instance<br/>Public IP 54.22.33.44"]
 ```
 
 ---
@@ -181,16 +182,23 @@
 
 ### Sơ đồ Public vs Private Hosted Zone
 
-```
-        Public Hosted Zone                      Private Hosted Zone
-   Client ──example.com?──► 54.22.33.44    ┌──────── VPC ─────────┐
-        │                                   │ db.example.internal? │
-        ├──► S3 Bucket                      │                      │
-        ├──► CloudFront                     │  EC2 (webapp.example.internal)
-        ├──► Application Load Balancer      │  EC2 (api.example.internal)
-        └──► EC2 Instance (Public IP)       │  DB  (db.example.internal)
-                                             │      → Private IP 10.0.0.35
-                                             └──────────────────────┘
+```mermaid
+flowchart TD
+    subgraph PUB["Public Hosted Zone"]
+        C["Client"] -->|"example.com?"| IP["54.22.33.44"]
+        IP --> S3["S3 Bucket"]
+        IP --> CF["CloudFront"]
+        IP --> ALB["Application Load Balancer"]
+        IP --> EC2P["EC2 Instance (Public IP)"]
+    end
+
+    subgraph PRIV["Private Hosted Zone — trong VPC"]
+        Q["db.example.internal?"]
+        W["EC2 (webapp.example.internal)"]
+        A["EC2 (api.example.internal)"]
+        D["DB (db.example.internal)<br/>→ Private IP 10.0.0.35"]
+        Q --> D
+    end
 ```
 
 > **Bẫy thi:** Tên miền nội bộ (`.internal`, `.local`) chỉ phân giải được **từ trong VPC** đã được liên kết với Private Hosted Zone.
@@ -350,13 +358,13 @@ echo "<h1>Hello world from $(hostname -f) in AZ $EC2_AVAIL_ZONE </h1>" > /var/ww
 
 **TTL (Time To Live)** = khoảng thời gian **client cache lại kết quả DNS** trước khi hỏi lại Route 53.
 
-```
-   Client ──DNS Request: myapp.example.com?──► Amazon Route 53
-          ◄── A 12.34.56.78 (with TTL) ────────┘
-          │
-          │  Client sẽ CACHE kết quả trong đúng TTL của record
-          │
-          └──HTTP Request──► Web Server ──HTTP Response──►
+```mermaid
+flowchart LR
+    C["Client<br/>CACHE kết quả trong đúng TTL của record"]
+    C -->|"DNS Request: myapp.example.com?"| R53["Amazon Route 53"]
+    R53 -->|"A 12.34.56.78 (with TTL)"| C
+    C -->|"HTTP Request"| WS["Web Server"]
+    WS -->|"HTTP Response"| C
 ```
 
 ### So sánh High TTL vs Low TTL ⭐⭐
@@ -494,15 +502,17 @@ Trỏ tới EC2 DNS name          → ❌ KHÔNG Alias được → dùng A reco
 - ⭐ **Khi bật Alias, chỉ được chỉ định MỘT tài nguyên AWS**
 - ⚠️ ⭐⭐ **KHÔNG THỂ liên kết với Health Checks**
 
-```
-   Single Value:
-   Client ──► Route 53 ──► foo.example.com  A 11.22.33.44
+```mermaid
+flowchart LR
+    subgraph SV["Single Value"]
+        C1["Client"] --> R1["Route 53"]
+        R1 --> V1["foo.example.com<br/>A 11.22.33.44"]
+    end
 
-   Multiple Value:
-   Client ──► Route 53 ──► foo.example.com  A 11.22.33.44
-                                            A 55.66.77.88
-                                            A 99.11.22.33
-              ▲ Client tự chọn NGẪU NHIÊN một giá trị
+    subgraph MV["Multiple Value — Client tự chọn NGẪU NHIÊN một giá trị"]
+        C2["Client"] --> R2["Route 53"]
+        R2 --> V2["foo.example.com<br/>A 11.22.33.44<br/>A 55.66.77.88<br/>A 99.11.22.33"]
+    end
 ```
 
 > ⭐ **Điểm khác biệt then chốt với Multi-Value:** Simple **không có health check** → có thể trả về IP của server đã chết.
@@ -528,10 +538,12 @@ traffic (%) = ──────────────────────
 
 ### Ví dụ (từ slide)
 
-```
-                        Weight: 70  →  70%
-   Client ──► Route 53 ─ Weight: 20  →  20%
-                        Weight: 10  →  10%
+```mermaid
+flowchart LR
+    C["Client"] --> R53["Route 53"]
+    R53 -->|"Weight: 70"| A["70% traffic"]
+    R53 -->|"Weight: 20"| B["20% traffic"]
+    R53 -->|"Weight: 10"| D["10% traffic"]
 ```
 
 ### Use cases ⭐
@@ -558,9 +570,11 @@ traffic (%) = ──────────────────────
 - ⚠️ ⭐ **Người dùng ở Đức CÓ THỂ được chuyển hướng tới Mỹ** (nếu đó là đường có độ trễ thấp nhất)
 - ⭐ **CÓ THỂ liên kết với Health Checks** (có khả năng failover)
 
-```
-   Users ──► Route 53 ──► ALB (us-east-1)          ← latency thấp nhất cho user Mỹ
-                      └─► ALB (ap-southeast-1)      ← latency thấp nhất cho user châu Á
+```mermaid
+flowchart LR
+    U["Users"] --> R53["Route 53"]
+    R53 --> A["ALB (us-east-1)<br/>latency thấp nhất cho user Mỹ"]
+    R53 --> B["ALB (ap-southeast-1)<br/>latency thấp nhất cho user châu Á"]
 ```
 
 ### ⭐⭐ Latency vs Geolocation — phân biệt rõ
@@ -612,13 +626,17 @@ Các thông số **rất hay ra thi**:
 > **Cấu hình router/firewall của bạn để CHO PHÉP các request đến từ Route 53 Health Checkers.**
 > Dải IP: **`https://ip-ranges.amazonaws.com/ip-ranges.json`**
 
-```
-   Health Checker (sa-east-1) ──┐
-   Health Checker (us-west-1) ──┼── HTTP request to /health ──► ALB (eu-west-1)
-   Health Checker (us-east-1) ──┘   ◄────── 200 code ─────────  Auto Scaling group
-                                                                  EC2 Instance
-                                    ▲ Phải cho phép incoming request
-                                      từ dải IP của Route 53 Health Checkers
+```mermaid
+flowchart LR
+    H1["Health Checker (sa-east-1)"] --> ALB
+    H2["Health Checker (us-west-1)"] --> ALB
+    H3["Health Checker (us-east-1)"] --> ALB
+
+    ALB["ALB (eu-west-1)<br/>Auto Scaling group → EC2 Instance"]
+    ALB -->|"200 code"| H2
+
+    NOTE["Phải cho phép incoming request<br/>từ dải IP của Route 53 Health Checkers"]
+    ALB -.- NOTE
 ```
 
 ---
@@ -631,12 +649,16 @@ Các thông số **rất hay ra thi**:
 - ⭐ **Chỉ định BAO NHIÊU health check cần pass để health check CHA được pass**
 - ⭐ **Công dụng: thực hiện BẢO TRÌ website mà KHÔNG làm tất cả health check fail**
 
-```
-                Health Check (Parent)
-                  ╱       │       ╲     (OR / AND / NOT, tối đa 256 child)
-   Health Check(Child) HC(Child) HC(Child)
-        │monitor      │monitor    │monitor
-      EC2            EC2         EC2
+```mermaid
+flowchart TD
+    P["Health Check (Parent)<br/>OR / AND / NOT — tối đa 256 child"]
+    P --> C1["Health Check (Child)"]
+    P --> C2["Health Check (Child)"]
+    P --> C3["Health Check (Child)"]
+
+    C1 -->|"monitor"| E1["EC2"]
+    C2 -->|"monitor"| E2["EC2"]
+    C3 -->|"monitor"| E3["EC2"]
 ```
 
 ---
@@ -652,13 +674,16 @@ Các thông số **rất hay ra thi**:
 
 > **Tạo một CloudWatch Metric và gắn với một CloudWatch Alarm, rồi tạo một Health Check kiểm tra CHÍNH CÁI ALARM ĐÓ.**
 
-```
-   ┌────────── VPC ──────────┐
-   │    Private subnet        │
-   │       EC2 ──monitor──► CloudWatch Alarm
-   └──────────────────────────┘         ▲
-                                        │ monitor
-                     Health Checker (us-east-1)  ← nằm NGOÀI VPC
+```mermaid
+flowchart TD
+    subgraph VPC["VPC"]
+        subgraph PS["Private subnet"]
+            EC2["EC2"]
+        end
+    end
+
+    EC2 -->|"monitor"| CW["CloudWatch Alarm"]
+    HC["Health Checker (us-east-1)<br/>nằm NGOÀI VPC"] -->|"monitor"| CW
 ```
 
 > **Đây là câu trả lời chuẩn cho:** *"Làm sao health check một tài nguyên private/on-premises?"* → **CloudWatch Alarm + Health Check trên alarm đó**.
@@ -734,13 +759,12 @@ sudo systemctl start httpd
 
 ### Failover (Active-Passive) ⭐⭐
 
-```
-                    Health Check (BẮT BUỘC)
-                            │
-   Client ──DNS Requests──► Route 53 ──► EC2 Instance (PRIMARY)
-                                │
-                                └──Failover──► EC2 Instance
-                                               (SECONDARY – Disaster Recovery)
+```mermaid
+flowchart LR
+    C["Client"] -->|"DNS Requests"| R53["Route 53"]
+    HC["Health Check (BẮT BUỘC)"] --> R53
+    R53 --> P["EC2 Instance (PRIMARY)"]
+    R53 -->|"Failover"| S["EC2 Instance<br/>SECONDARY – Disaster Recovery"]
 ```
 
 ### Đặc điểm ⭐⭐
@@ -789,10 +813,11 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 - ⭐ **Use cases: website localization, giới hạn phân phối nội dung, load balancing**, …
 - ⭐ **CÓ THỂ liên kết với Health Checks**
 
-```
-   User ở Đức    ──► A 55.66.77.88   (record cho Germany)
-   User ở Mỹ     ──► A 11.22.33.44   (record cho United States)
-   User khác     ──► A 99.11.22.33   (record DEFAULT)
+```mermaid
+flowchart LR
+    U1["User ở Đức"] --> R1["A 55.66.77.88<br/>record cho Germany"]
+    U2["User ở Mỹ"] --> R2["A 11.22.33.44<br/>record cho United States"]
+    U3["User khác"] --> R3["A 99.11.22.33<br/>record DEFAULT"]
 ```
 
 ### Thứ tự ưu tiên khi chồng lấn ⭐
@@ -894,9 +919,10 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 
 **Kết quả:**
 
-```
-   User A (203.0.113.56) ──► khớp location-1 ──► EC2 Instance (1.2.3.4)
-   User B (200.5.4.100)  ──► khớp location-2 ──► EC2 Instance (5.6.7.8)
+```mermaid
+flowchart LR
+    A["User A (203.0.113.56)"] -->|"khớp location-1"| E1["EC2 Instance (1.2.3.4)"]
+    B["User B (200.5.4.100)"] -->|"khớp location-2"| E2["EC2 Instance (5.6.7.8)"]
 ```
 
 > **Mẹo thi:** Đề nhắc **"định tuyến theo ISP cụ thể"**, **"danh sách CIDR của client"**, **"giảm chi phí mạng"** → **IP-based routing**.
@@ -937,9 +963,10 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 - ⭐⭐ **NHƯNG bạn CÓ THỂ dùng một dịch vụ DNS KHÁC để quản lý DNS record**
 - ⭐ **Ví dụ: mua domain từ GoDaddy và dùng Route 53 để quản lý DNS record**
 
-```
-   User ──purchase example.com──► GoDaddy (Registrar)
-        └──manage DNS records──► Amazon Route 53 (DNS Service)
+```mermaid
+flowchart LR
+    U["User"] -->|"purchase example.com"| GD["GoDaddy (Registrar)"]
+    U -->|"manage DNS records"| R53["Amazon Route 53 (DNS Service)"]
 ```
 
 ### ⭐⭐ 3rd Party Registrar với Amazon Route 53 — 2 BƯỚC
@@ -990,15 +1017,18 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 - ⭐ **Các record trong Private Hosted Zones**
 - ⭐ **Các record trên public Name Servers**
 
-```
-   ┌────── Region / VPC ──────┐
-   │  Private Hosted Zone      │
-   │                           │──► Public Name Server
-   │   Route 53 Resolver       │
-   │         │                 │
-   │      EC2 Instance         │
-   │  (ec2-192-0-2-44.compute-1.amazonaws.com)
-   └───────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph REG["Region / VPC"]
+        PHZ["Private Hosted Zone"]
+        RES["Route 53 Resolver"]
+        EC2["EC2 Instance<br/>ec2-192-0-2-44.compute-1.amazonaws.com"]
+
+        PHZ --- RES
+        RES --- EC2
+    end
+
+    RES --> PNS["Public Name Server"]
 ```
 
 ---
@@ -1020,15 +1050,22 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 
 **Hướng: On-premises ──► AWS**
 
-```
-   On-Premises Data Center              us-east-1 VPC
-   (onpremise.private)                  Private Hosted Zone (aws.private)
-                                        Private Subnet
-   DNS Resolvers ──DNS Query───────►  Resolver          Route 53
-                  app.aws.private?    INBOUND Endpoint ──► Resolver
-   Server                              (qua VPN hoặc DX)      │ lookup
-   (web.onpremise.private)                                    ▼
-                                                     EC2 (app.aws.private)
+```mermaid
+flowchart LR
+    subgraph ONP["On-Premises Data Center (onpremise.private)"]
+        DNSR["DNS Resolvers"]
+        SRV["Server<br/>web.onpremise.private"]
+    end
+
+    subgraph AWS["us-east-1 VPC — Private Hosted Zone (aws.private)"]
+        IN["Resolver INBOUND Endpoint<br/>(Private Subnet)"]
+        R53["Route 53 Resolver"]
+        EC2["EC2 (app.aws.private)"]
+    end
+
+    DNSR -->|"DNS Query: app.aws.private?<br/>(qua VPN hoặc DX)"| IN
+    IN --> R53
+    R53 -->|"lookup"| EC2
 ```
 
 #### 2️⃣ Outbound Endpoint
@@ -1037,17 +1074,23 @@ dig myapp.example.com     # ⭐ giờ trả về IP của Secondary
 
 **Hướng: AWS ──► On-premises**
 
-```
-   us-east-1 VPC                        On-Premises Data Center
-   Private Subnet                       (onpremise.private)
-   EC2 (app.aws.private)
-        │ DNS Query
-        │ web.onpremise.private?
-        ▼
-   Route 53 Resolver ──► Resolver ──DNS Query──► DNS Resolvers
-                         OUTBOUND     web.onpremise.private?      │
-                         Endpoint     (qua VPN hoặc DX)           ▼
-                                                    Server (web.onpremise.private)
+```mermaid
+flowchart LR
+    subgraph AWS["us-east-1 VPC — Private Subnet"]
+        EC2["EC2 (app.aws.private)"]
+        R53["Route 53 Resolver"]
+        OUT["Resolver OUTBOUND Endpoint"]
+    end
+
+    subgraph ONP["On-Premises Data Center (onpremise.private)"]
+        DNSR["DNS Resolvers"]
+        SRV["Server<br/>web.onpremise.private"]
+    end
+
+    EC2 -->|"DNS Query: web.onpremise.private?"| R53
+    R53 --> OUT
+    OUT -->|"DNS Query: web.onpremise.private?<br/>(qua VPN hoặc DX)"| DNSR
+    DNSR --> SRV
 ```
 
 ### ⭐ Bảng ghi nhớ 2 loại Endpoint

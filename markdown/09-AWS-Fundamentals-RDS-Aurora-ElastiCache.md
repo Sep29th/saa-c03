@@ -104,12 +104,15 @@
 - **Replica có thể được PROMOTE (thăng cấp) thành DB độc lập của riêng nó** ⭐
 - **Ứng dụng PHẢI CẬP NHẬT connection string** để tận dụng read replica ⭐
 
-```
-                 Application
-        reads   /    │ writes    \  reads
-               /     │            \
-   RDS DB     ◄──ASYNC──  RDS DB  ──ASYNC──►  RDS DB
-   read replica      replication   instance   replication   read replica
+```mermaid
+flowchart TD
+    APP["Application"]
+    APP -->|"writes"| M["RDS DB instance<br/>(master)"]
+    APP -->|"reads"| R1["RDS DB read replica"]
+    APP -->|"reads"| R2["RDS DB read replica"]
+
+    M -->|"ASYNC replication"| R1
+    M -->|"ASYNC replication"| R2
 ```
 
 #### Use Cases ⭐
@@ -146,14 +149,18 @@
 - ⚠️ **KHÔNG dùng để scaling** ⭐⭐
 - **Lưu ý: Read Replicas CÓ THỂ được thiết lập là Multi-AZ cho mục đích DR**
 
-```
-              Application
-         writes │      │ reads
-                ▼      ▼
-    ┌──── One DNS name – automatic failover ────┐
-    │                                            │
- RDS Master DB  ◄────SYNC replication────►  RDS DB instance
- instance (AZ A)                             standby (AZ B)
+```mermaid
+flowchart TD
+    APP["Application"]
+    APP -->|"writes"| DNS
+    APP -->|"reads"| DNS
+
+    subgraph DNSG["One DNS name – automatic failover"]
+        DNS["RDS Endpoint"]
+    end
+
+    DNS --> M["RDS Master DB instance<br/>(AZ A)"]
+    M <-->|"SYNC replication"| S["RDS DB instance standby<br/>(AZ B)"]
 ```
 
 > ⭐ **Standby instance KHÔNG phục vụ đọc.** Nó chỉ nằm chờ để failover. Đây là điểm khác biệt cốt lõi với Read Replica.
@@ -171,10 +178,11 @@ Chuyển từ Single-AZ sang Multi-AZ:
   2. **Một DB mới được restore từ snapshot đó ở một AZ mới**
   3. **Synchronization (đồng bộ) được thiết lập giữa hai database**
 
-```
-  RDS DB instance ──snapshot──► DB snapshot ──restore──► Standby DB
-         ▲                                                    │
-         └────────────── SYNC Replication ────────────────────┘
+```mermaid
+flowchart LR
+    DB["RDS DB instance"] -->|"snapshot"| SNAP["DB snapshot"]
+    SNAP -->|"restore"| STBY["Standby DB"]
+    STBY -->|"SYNC Replication"| DB
 ```
 
 ---
@@ -323,8 +331,10 @@ Chuyển từ Single-AZ sang Multi-AZ:
 
 ### Quy trình tùy biến ⭐
 
-```
-User ──apply customizations──► [Automation Mode DISABLED] ──SSH──► EC2 Instance
+```mermaid
+flowchart LR
+    U["User"] -->|"apply customizations"| AM["Automation Mode DISABLED"]
+    AM -->|"SSH"| EC2["EC2 Instance"]
 ```
 
 - ⭐ **PHẢI DE-ACTIVATE (tắt) Automation Mode** để thực hiện tùy biến
@@ -379,19 +389,27 @@ User ──apply customizations──► [Automation Mode DISABLED] ──SSH─
 - ⭐ **Master + tối đa 15 Aurora Read Replicas phục vụ READ**
 - ⭐ **Hỗ trợ Cross Region Replication**
 
-```
-      AZ 1              AZ 2                    AZ 3
-   ┌───────┐        ┌───────┬───────┐      ┌───────┬───────┐
-   │   W   │        │   R   │   R   │      │   R   │   R   │
-   └───┬───┘        └───┬───┴───┬───┘      └───┬───┴───┬───┘
-       └────────────────┴───────┴──────────────┴───────┘
-                              │
-       ┌──────────────────────▼──────────────────────────┐
-       │        Shared Storage Volume                     │
-       │  6 bản sao / 3 AZ                                │
-       │  Replication + Self Healing + Auto Expanding     │
-       │  Ghi: cần 4/6   —   Đọc: cần 3/6                 │
-       └──────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph AZ1["AZ 1"]
+        W["W — Writer"]
+    end
+    subgraph AZ2["AZ 2"]
+        R1["R"]
+        R2["R"]
+    end
+    subgraph AZ3["AZ 3"]
+        R3["R"]
+        R4["R"]
+    end
+
+    SV["Shared Storage Volume<br/>6 bản sao / 3 AZ<br/>Replication + Self Healing + Auto Expanding<br/>Ghi: cần 4/6 — Đọc: cần 3/6"]
+
+    W --> SV
+    R1 --> SV
+    R2 --> SV
+    R3 --> SV
+    R4 --> SV
 ```
 
 ---
@@ -400,22 +418,28 @@ User ──apply customizations──► [Automation Mode DISABLED] ──SSH─
 
 Đây là khái niệm **cực kỳ quan trọng**:
 
-```
-                          client
-                         /      \
-        Writer Endpoint /        \ Reader Endpoint
-     (Pointing to the master)   (Connection Load Balancing)
-              │                        │
-              ▼                        ▼
-           ┌─────┐        ┌────┬────┬────┬────┬────┐
-           │  W  │        │ R  │ R  │ R  │ R  │ R  │  ◄── Auto Scaling
-           └──┬──┘        └─┬──┴─┬──┴─┬──┴─┬──┴─┬──┘
-              └─────────────┴────┴────┴────┴────┘
-                            │
-              ┌─────────────▼──────────────────────┐
-              │      Shared Storage Volume          │
-              │  Auto Expanding from 10G to 256 TB  │
-              └─────────────────────────────────────┘
+```mermaid
+flowchart TD
+    C["client"]
+    C -->|"Writer Endpoint<br/>(Pointing to the master)"| W["W"]
+    C -->|"Reader Endpoint<br/>(Connection Load Balancing)"| RG
+
+    subgraph RG["Read Replicas — Auto Scaling"]
+        R1["R"]
+        R2["R"]
+        R3["R"]
+        R4["R"]
+        R5["R"]
+    end
+
+    SV["Shared Storage Volume<br/>Auto Expanding from 10G to 256 TB"]
+
+    W --> SV
+    R1 --> SV
+    R2 --> SV
+    R3 --> SV
+    R4 --> SV
+    R5 --> SV
 ```
 
 | Endpoint | Chức năng |
@@ -468,10 +492,11 @@ User ──apply customizations──► [Automation Mode DISABLED] ──SSH─
 
 Sau khi tạo xong, trong danh sách **Databases** bạn thấy **cấu trúc phân cấp**:
 
-```
-database-aurora                      ← Regional cluster
-├── database-aurora-instance-1       ← Role: Writer instance
-└── database-aurora-instance-2       ← Role: Reader instance
+```mermaid
+flowchart TD
+    C["database-aurora<br/>Regional cluster"]
+    C --> I1["database-aurora-instance-1<br/>Role: Writer instance"]
+    C --> I2["database-aurora-instance-2<br/>Role: Reader instance"]
 ```
 
 Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** ⭐:
@@ -531,12 +556,18 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - Aurora **tự động thêm replica mới** (Replicas Auto Scaling).
 - ⭐ **Reader Endpoint được MỞ RỘNG (Endpoint Extended)** để bao gồm các replica mới → **ứng dụng không cần thay đổi gì**.
 
-```
-   Client ──Many Requests──► Writer Endpoint
-                          └► Reader Endpoint ──► [W] [R] [R] [R] [R]
-                                  ▲ Endpoint Extended    ▲
-                                                   Replicas Auto Scaling
-                                                   (khi CPU Usage cao)
+```mermaid
+flowchart LR
+    C["Client"] -->|"Many Requests"| WE["Writer Endpoint"]
+    C --> RE["Reader Endpoint<br/>(Endpoint tự mở rộng)"]
+
+    WE --> W["W"]
+    RE --> R1["R"]
+    RE --> R2["R"]
+    RE --> R3["R"]
+    RE --> R4["R"]
+
+    RE -.- AS["Replicas Auto Scaling<br/>khi CPU Usage cao"]
 ```
 
 ---
@@ -547,12 +578,17 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - **Ví dụ: chạy các truy vấn phân tích (analytical queries) trên các replica CỤ THỂ**
 - ⭐ **Reader Endpoint NÓI CHUNG KHÔNG CÒN ĐƯỢC DÙNG sau khi định nghĩa Custom Endpoints**
 
-```
-   Client ──Queries──► Writer Endpoint ──► [W]
+```mermaid
+flowchart LR
+    C["Client"] -->|"Queries"| WE["Writer Endpoint"]
+    C -->|"Analytical Queries"| CE["Custom Endpoint"]
+    C --> RE["Reader Endpoint"]
 
-          ──Analytical Queries──► Custom Endpoint ──► [R] [R]  (db.r5.2xlarge)
-
-                       Reader Endpoint ──────────────► [R] [R]  (db.r3.large)
+    WE --> W["W"]
+    CE --> CR1["R (db.r5.2xlarge)"]
+    CE --> CR2["R (db.r5.2xlarge)"]
+    RE --> RR1["R (db.r3.large)"]
+    RE --> RR2["R (db.r3.large)"]
 ```
 
 > **Use case điển hình:** replica nhỏ (`db.r3.large`) phục vụ traffic thường, replica lớn (`db.r5.2xlarge`) gom vào Custom Endpoint để chạy báo cáo nặng.
@@ -566,8 +602,10 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - ⭐ **KHÔNG cần capacity planning**
 - ⭐ **Trả tiền THEO GIÂY (pay per second)**, **có thể tiết kiệm chi phí hơn**
 
-```
-   Client ──► Proxy Fleet (managed by Aurora) ──► Shared storage Volume
+```mermaid
+flowchart LR
+    C["Client"] --> P["Proxy Fleet<br/>(managed by Aurora)"]
+    P --> SV["Shared storage Volume"]
 ```
 
 > **Mẹo thi:** "workload không đoán trước", "không muốn capacity planning", "trả theo giây" → **Aurora Serverless**.
@@ -592,10 +630,11 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 | **Promote Region khác (cho DR)** | ⭐ **RTO < 1 PHÚT** |
 | **Thời gian replication cross-region điển hình** | ⭐ **dưới 1 giây** |
 
-```
-   us-east-1 - PRIMARY region          eu-west-1 - SECONDARY region
-   Applications: Read / Write   ──replication──►   Applications: Read Only
-                                (< 1 giây)
+```mermaid
+flowchart LR
+    P["us-east-1 — PRIMARY region<br/>Applications: Read / Write"]
+    S["eu-west-1 — SECONDARY region<br/>Applications: Read Only"]
+    P -->|"replication (< 1 giây)"| S
 ```
 
 ### Các con số Global Aurora cần thuộc ⭐
@@ -622,13 +661,12 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - ⭐ **Bạn KHÔNG cần có kinh nghiệm về ML**
 - ⭐ **Use cases: fraud detection, ads targeting, sentiment analysis, product recommendations**
 
-```
-   Application ──SQL query (Recommended products?)──► Amazon Aurora
-                                                          │  data (user profile, shopping history)
-                                                          ▼
-                                            Amazon SageMaker / Amazon Comprehend
-                                                          │  predictions (red shirt, blue pants)
-   Application ◄──query results (red shirt, blue …)───────┘
+```mermaid
+flowchart TD
+    APP["Application"] -->|"SQL query: Recommended products?"| AUR["Amazon Aurora"]
+    AUR -->|"data: user profile, shopping history"| ML["Amazon SageMaker / Amazon Comprehend"]
+    ML -->|"predictions: red shirt, blue pants"| AUR
+    AUR -->|"query results: red shirt, blue …"| APP
 ```
 
 ---
@@ -640,15 +678,16 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - ⭐ **Yêu cầu KHÔNG hoặc RẤT ÍT thay đổi code** (vẫn dùng chính **MS SQL Server client driver** cũ)
 - **Cùng một ứng dụng có thể được dùng sau khi migrate database** (dùng **AWS SCT** và **DMS**)
 
-```
-   Application                          Application
-   SQL Server Client Driver             PostgreSQL Driver
-          │ T-SQL                              │ PL/pgSQL
-          ▼                                    ▼
-      ┌────────────────── Aurora PostgreSQL ──────────────────┐
-      │  T-SQL ──► Babelfish ──► PostgreSQL                    │
-      └────────────────────────────────────────────────────────┘
-                          ▲ migrate (AWS SCT + DMS)
+```mermaid
+flowchart TD
+    A1["Application<br/>SQL Server Client Driver"] -->|"T-SQL"| BF
+    A2["Application<br/>PostgreSQL Driver"] -->|"PL/pgSQL"| PG
+
+    subgraph AUR["Aurora PostgreSQL"]
+        BF["Babelfish"] -->|"dịch T-SQL"| PG["PostgreSQL"]
+    end
+
+    MIG["migrate (AWS SCT + DMS)"] -.-> AUR
 ```
 
 > **Mẹo thi:** "migrate ứng dụng SQL Server sang Aurora mà không sửa code" → **Babelfish**.
@@ -665,8 +704,9 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 - ⭐ **RẤT NHANH & TIẾT KIỆM CHI PHÍ**
 - ⭐ **Hữu ích để tạo database "STAGING" từ database "PRODUCTION" mà KHÔNG ẢNH HƯỞNG tới production**
 
-```
-   Production Aurora ──clone (copy-on-write)──► Staging Aurora
+```mermaid
+flowchart LR
+    P["Production Aurora"] -->|"clone (copy-on-write)"| S["Staging Aurora"]
 ```
 
 > **So sánh 3 cách tạo bản sao:**
@@ -824,16 +864,15 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 
 ### Sơ đồ
 
-```
-┌──────────────────────── VPC ────────────────────────┐
-│                                                      │
-│   Lambda functions ──IAM Authentication──►           │
-│         …                                            │
-│                        ┌──── Private subnet ────┐    │
-│                        │  RDS Proxy ──► RDS DB  │    │
-│                        │                Instance│    │
-│                        └────────────────────────┘    │
-└──────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph VPC["VPC"]
+        L["Lambda functions"]
+        subgraph PS["Private subnet"]
+            PROXY["RDS Proxy"] --> DB["RDS DB Instance"]
+        end
+        L -->|"IAM Authentication"| PROXY
+    end
 ```
 
 ### ⭐⭐ Use case kinh điển: Lambda + RDS
@@ -870,11 +909,12 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 
 ### Solution Architecture 1 — DB Cache ⭐⭐
 
-```
-                        ┌── Cache hit ──► trả về ngay
-   application ──► Amazon ElastiCache
-                        └── Cache miss ──► Read from DB ──► Amazon RDS
-                                    ◄── Write to cache ────┘
+```mermaid
+flowchart LR
+    APP["application"] --> EC["Amazon ElastiCache"]
+    EC -->|"Cache hit"| HIT["Trả về ngay"]
+    EC -->|"Cache miss"| RDS["Amazon RDS<br/>Read from DB"]
+    RDS -->|"Write to cache"| EC
 ```
 
 - ⭐ **Ứng dụng truy vấn ElastiCache; nếu không có, lấy từ RDS rồi LƯU vào ElastiCache**
@@ -885,11 +925,14 @@ Chọn cluster → tab **Connectivity & security** → thấy **các endpoint** 
 
 ### Solution Architecture 2 — User Session Store ⭐⭐
 
-```
-   User ──login──► [application instance 1] ──Write session──► Amazon ElastiCache
-                                                                       │
-   User ──hit another instance──► [application instance 2] ◄──Retrieve session──┘
-                                  → user đã đăng nhập sẵn!
+```mermaid
+flowchart TD
+    U1["User"] -->|"login"| A1["application instance 1"]
+    A1 -->|"Write session"| EC["Amazon ElastiCache"]
+
+    U2["User (hit another instance)"] --> A2["application instance 2"]
+    EC -->|"Retrieve session"| A2
+    A2 -.- NOTE["→ user đã đăng nhập sẵn!"]
 ```
 
 Luồng hoạt động:
@@ -1034,12 +1077,12 @@ Ba mẫu thiết kế cần nắm:
 | **Write Through** ⭐ | **THÊM hoặc CẬP NHẬT dữ liệu trong cache NGAY KHI ghi vào DB** → ⭐ **KHÔNG có dữ liệu cũ (no stale data)** |
 | **Session Store** ⭐ | **Lưu dữ liệu session tạm thời trong cache** (dùng **tính năng TTL**) |
 
-```
-                        ┌── Cache hit ──► trả về
-   application ──► Amazon ElastiCache
-                        └── Cache miss ──► Read from DB ──► Amazon RDS
-                                    ◄── Write to cache ────┘
-              (Lazy Loading illustrated)
+```mermaid
+flowchart LR
+    APP["application"] --> EC["Amazon ElastiCache"]
+    EC -->|"Cache hit"| HIT["Trả về"]
+    EC -->|"Cache miss"| RDS["Amazon RDS<br/>Read from DB"]
+    RDS -->|"Write to cache"| EC
 ```
 
 ### So sánh Lazy Loading vs Write Through ⭐
@@ -1067,12 +1110,10 @@ Ba mẫu thiết kế cần nắm:
 | **Redis AUTH** ⭐ | • **Bạn có thể đặt một "password/token" khi tạo Redis cluster**<br>• **Đây là lớp bảo mật BỔ SUNG cho cache** (trên nền security groups)<br>• ⭐ **Hỗ trợ SSL in-flight encryption** |
 | **Memcached** | ⭐ **Hỗ trợ SASL-based authentication** (nâng cao) |
 
-```
-   Client ──► EC2 (EC2 Security group)
-                    │  SSL encryption
-                    │  Redis AUTH
-                    ▼
-              Redis (Redis Security group)
+```mermaid
+flowchart TD
+    C["Client"] --> EC2["EC2<br/>(EC2 Security group)"]
+    EC2 -->|"SSL encryption<br/>Redis AUTH"| R["Redis<br/>(Redis Security group)"]
 ```
 
 > **Bẫy thi:** "IAM policy có kiểm soát được ai đọc/ghi vào Redis không?" → **KHÔNG**. IAM chỉ kiểm soát **AWS API** (tạo/xóa cluster). Muốn bảo vệ dữ liệu trong cache → **Redis AUTH**.
@@ -1085,10 +1126,15 @@ Ba mẫu thiết kế cần nắm:
 - ⭐⭐ **Redis SORTED SETS đảm bảo CẢ tính DUY NHẤT (uniqueness) VÀ THỨ TỰ phần tử (element ordering)**
 - ⭐ **Mỗi khi một phần tử mới được thêm vào, nó được XẾP HẠNG THEO THỜI GIAN THỰC, rồi được thêm vào ĐÚNG THỨ TỰ**
 
-```
-   Clients ──► ElastiCache for Redis ──┐
-           ──► ElastiCache for Redis ──┼──► Real-time Leaderboard  1. / 2. / 3.
-           ──► ElastiCache for Redis ──┘
+```mermaid
+flowchart LR
+    C["Clients"] --> R1["ElastiCache for Redis"]
+    C --> R2["ElastiCache for Redis"]
+    C --> R3["ElastiCache for Redis"]
+
+    R1 --> LB["Real-time Leaderboard<br/>1. / 2. / 3."]
+    R2 --> LB
+    R3 --> LB
 ```
 
 > **Mẹo thi:** Đề nhắc **"leaderboard"**, **"real-time ranking"**, **"uniqueness + ordering"** → **Redis Sorted Sets**.
