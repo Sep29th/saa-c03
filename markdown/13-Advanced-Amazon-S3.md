@@ -32,15 +32,16 @@
 
 ### Sơ đồ luồng chuyển đổi ⭐
 
-```
-   Standard
-      ├──► Standard IA
-      ├──► Intelligent Tiering
-      ├──► One-Zone IA
-      ├──► Glacier Instant Retrieval
-      ├──► Glacier Flexible Retrieval
-      └──► Glacier Deep Archive
-              (càng xuống dưới càng RẺ, truy xuất càng CHẬM)
+```mermaid
+flowchart TD
+    S["Standard"]
+    S --> A["Standard IA"]
+    S --> B["Intelligent Tiering"]
+    S --> C["One-Zone IA"]
+    S --> D["Glacier Instant Retrieval"]
+    S --> E["Glacier Flexible Retrieval"]
+    S --> F["Glacier Deep Archive"]
+    F -.-> N["⭐ Càng xuống dưới càng RẺ,<br/>truy xuất càng CHẬM"]
 ```
 
 ---
@@ -134,8 +135,11 @@
 | 8/25/2022 | STANDARD | 030-044 |
 | 9/6/2022 | STANDARD | 120-149 |
 
-```
-   S3 Bucket ──► S3 Analytics ──► .csv report ──► xây dựng Lifecycle Rules
+```mermaid
+flowchart LR
+    B["S3 Bucket"] --> A["S3 Analytics"]
+    A --> C[".csv report"]
+    C --> L["Xây dựng Lifecycle Rules"]
 ```
 
 > ⭐⭐ **Mẹo thi:** Đề hỏi *"làm sao biết nên đặt Lifecycle Rule như thế nào?"* → **S3 Analytics — Storage Class Analysis**. Nhớ kèm 2 giới hạn: **chỉ Standard/Standard-IA**, **24–48 giờ mới có dữ liệu**.
@@ -209,11 +213,13 @@ Console cho phép chọn **5 loại action**:
 
 > ⭐ **Nhìn chung, CHỦ BUCKET (bucket owner) trả TẤT CẢ chi phí lưu trữ Amazon S3 và chi phí truyền dữ liệu liên quan tới bucket của họ**
 
-```
-   ┌──────── Standard Bucket ────────┐
-   │  Owner $$ Storage Cost           │
-   │  Owner $$ Networking Cost        │──download──► Requester (trả $0)
-   └──────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph SB["Standard Bucket"]
+        O1["Owner 💲 Storage Cost"]
+        O2["Owner 💲 Networking Cost"]
+    end
+    SB -->|"download"| R["Requester<br/>(trả $0)"]
 ```
 
 ---
@@ -222,11 +228,13 @@ Console cho phép chọn **5 loại action**:
 
 > ⭐⭐ **NGƯỜI YÊU CẦU (requester) THAY VÌ chủ bucket sẽ trả chi phí của REQUEST và việc TẢI DỮ LIỆU từ bucket**
 
-```
-   ┌──────── Requester Pays Bucket ────────┐
-   │  Owner     $$ Storage Cost             │
-   │  Requester $$ Networking Cost          │──download──► Requester (TRẢ TIỀN)
-   └────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph RB["⭐ Requester Pays Bucket"]
+        O1["Owner 💲 Storage Cost"]
+        O2["⭐ Requester 💲 Networking Cost"]
+    end
+    RB -->|"download"| R["Requester<br/>(TRẢ TIỀN)"]
 ```
 
 ### Bảng phân chia chi phí ⭐⭐
@@ -276,10 +284,11 @@ x-amz-request-payer: requester
 
 ### 3 đích đến truyền thống ⭐⭐
 
-```
-                    ┌──► SNS
-   Amazon S3 ──events──► SQS
-                    └──► Lambda Function
+```mermaid
+flowchart LR
+    S3["Amazon S3"] -->|"events"| SNS["SNS"]
+    S3 -->|"events"| SQS["SQS"]
+    S3 -->|"events"| L["Lambda Function"]
 ```
 
 | Đích | Dùng khi |
@@ -294,10 +303,11 @@ x-amz-request-payer: requester
 
 Đây là điểm **cực kỳ hay ra thi**:
 
-```
-                    ┌──► SNS     ← ⭐ SNS Resource (Access) Policy
-   Amazon S3 ──events──► SQS     ← ⭐ SQS Resource (Access) Policy
-                    └──► Lambda  ← ⭐ Lambda Resource Policy
+```mermaid
+flowchart LR
+    S3["Amazon S3"] -->|"events"| SNS["SNS<br/>⭐ SNS Resource (Access) Policy"]
+    S3 -->|"events"| SQS["SQS<br/>⭐ SQS Resource (Access) Policy"]
+    S3 -->|"events"| L["Lambda<br/>⭐ Lambda Resource Policy"]
 ```
 
 ### ⚠️⭐⭐ Quy tắc vàng:
@@ -317,9 +327,10 @@ x-amz-request-payer: requester
 
 ### ⭐⭐ S3 Event Notifications với Amazon EventBridge
 
-```
-   Amazon S3 bucket ──All events──► Amazon EventBridge ──rules──► ⭐ Over 18 AWS services
-                                                                     as destinations
+```mermaid
+flowchart LR
+    S3["Amazon S3 bucket"] -->|"All events"| EB["Amazon EventBridge"]
+    EB -->|"rules"| D["⭐ Over 18 AWS services<br/>as destinations"]
 ```
 
 ### Ba nhóm lợi ích ⭐⭐
@@ -472,9 +483,14 @@ x-amz-request-payer: requester
 - ⭐⭐ **BẮT BUỘC dùng cho file > 5GB**
 - ⭐ **Giúp SONG SONG HÓA việc upload (tăng tốc truyền)**
 
-```
-   BIG file ──Divide in parts──► [Part 1] [Part 2] … [Part N]
-                                     └── Parallel uploads ──► Amazon S3
+```mermaid
+flowchart LR
+    F["BIG file"] -->|"Divide in parts"| P1["Part 1"]
+    F --> P2["Part 2"]
+    F --> PN["Part N"]
+    P1 -->|"⭐ Parallel uploads"| S3["Amazon S3"]
+    P2 --> S3
+    PN --> S3
 ```
 
 > ⭐ **Hai con số phải nhớ: khuyến nghị > 100MB, BẮT BUỘC > 5GB.**
@@ -484,8 +500,10 @@ x-amz-request-payer: requester
 - ⭐⭐ **Tăng tốc độ truyền bằng cách chuyển file tới một AWS EDGE LOCATION, nơi sẽ CHUYỂN TIẾP dữ liệu tới S3 bucket ở Region đích**
 - ⭐ **TƯƠNG THÍCH với multi-part upload**
 
-```
-   File in USA ──Fast (public www)──► Edge Location USA ──Fast (private AWS)──► S3 Bucket Australia
+```mermaid
+flowchart LR
+    F["File in USA"] -->|"Fast (public www)"| E["Edge Location USA"]
+    E -->|"⭐ Fast (private AWS network)"| S3["S3 Bucket Australia"]
 ```
 
 > ⭐⭐ **Ý tưởng:** giảm tối đa quãng đường đi trên **internet công cộng (chậm)**, tối đa hóa quãng đường đi trên **mạng riêng của AWS (nhanh)**.
@@ -502,12 +520,19 @@ x-amz-request-payer: requester
 | ⭐⭐ **Tăng tốc download** | **Chia file thành nhiều phần, request SONG SONG** |
 | ⭐⭐ **Lấy MỘT PHẦN dữ liệu** | **Ví dụ: chỉ lấy PHẦN ĐẦU (header) của file** |
 
-```
-   Tăng tốc download:
-   File in S3 ──► [Part 1] [Part 2] … [Part N] ──► Requests in parallel
-
-   Lấy header:
-   File in S3 ──► Byte-range request for header (first XX bytes) ──► header
+```mermaid
+flowchart LR
+    subgraph SP["⭐ Tăng tốc download"]
+        F1["File in S3"] --> P1["Part 1"]
+        F1 --> P2["Part 2"]
+        F1 --> PN["Part N"]
+        P1 -->|"Requests in parallel"| R1["Client"]
+        P2 --> R1
+        PN --> R1
+    end
+    subgraph HD["⭐ Lấy header"]
+        F2["File in S3"] -->|"Byte-range request<br/>(first XX bytes)"| H["header"]
+    end
 ```
 
 ### ⭐⭐ Bảng tổng hợp 3 kỹ thuật
@@ -556,18 +581,14 @@ x-amz-request-payer: requester
 
 ### Sơ đồ luồng hoàn chỉnh ⭐
 
-```
-   S3 Inventory ──► Objects List Report
-                            │
-                            ▼
-                         Athena ──filter──► filtered list
-                            │                    │
-   User ──operation + parameters──────────────────┤
-                                                  ▼
-                                      ⭐ S3 Batch Operations
-                                                  │
-                                                  ▼
-                                          Processed Objects
+```mermaid
+flowchart TD
+    I["S3 Inventory"] --> O["Objects List Report"]
+    O --> A["Athena"]
+    A -->|"filter"| FL["filtered list"]
+    U["User"] -->|"operation + parameters"| BO["⭐ S3 Batch Operations"]
+    FL --> BO
+    BO --> P["Processed Objects"]
 ```
 
 ### ⭐⭐ Bộ ba cần nhớ
@@ -594,14 +615,18 @@ x-amz-request-payer: requester
 
 ### Sơ đồ ⭐
 
-```
-   Organization ──┐
-   Accounts     ──┤                                   ┌── Summary Insights
-   Regions      ──┼──► ⭐ S3 Storage Lens ──Analyze──►├── Data Protection
-   Buckets      ──┘         (Aggregate)   (Dashboard)  └── Cost Efficiency
-                                                              │
-                                                              ▼
-                                                          Optimize
+```mermaid
+flowchart LR
+    ORG["Organization"] --> SL["⭐ S3 Storage Lens<br/>(Aggregate)"]
+    ACC["Accounts"] --> SL
+    REG["Regions"] --> SL
+    BK["Buckets"] --> SL
+    SL -->|"Analyze (Dashboard)"| SI["Summary Insights"]
+    SL --> DP["Data Protection"]
+    SL --> CE["Cost Efficiency"]
+    SI --> OP["Optimize"]
+    DP --> OP
+    CE --> OP
 ```
 
 ---

@@ -61,10 +61,12 @@
 - ⭐⭐ **PHẢI set header: `"x-amz-server-side-encryption": "AES256"`**
 - ⭐⭐ **BẬT MẶC ĐỊNH cho bucket mới & object mới**
 
-```
-   User ──Object upload──► HTTP(S) + Header ──► Amazon S3
-                                                    │
-                            S3 Owned Key ──► [Encryption] ──► S3 Bucket
+```mermaid
+flowchart LR
+    U["User"] -->|"Object upload<br/>HTTP(S) + Header"| S3["Amazon S3"]
+    K["⭐ S3 Owned Key"] --> E["Encryption"]
+    S3 --> E
+    E --> B["S3 Bucket"]
 ```
 
 ---
@@ -76,10 +78,12 @@
 - ⭐ **Object được mã hóa phía server**
 - ⭐⭐ **PHẢI set header: `"x-amz-server-side-encryption": "aws:kms"`**
 
-```
-   User ──Object upload──► HTTP(S) + Header ──► Amazon S3
-                                                    │
-                          AWS KMS (KMS Key) ──► [Encryption] ──► S3 Bucket
+```mermaid
+flowchart LR
+    U["User"] -->|"Object upload<br/>HTTP(S) + Header"| S3["Amazon S3"]
+    K["⭐ AWS KMS (KMS Key)"] --> E["Encryption"]
+    S3 --> E
+    E --> B["S3 Bucket"]
 ```
 
 ---
@@ -92,10 +96,11 @@
 - ⭐⭐ **Tính vào KMS QUOTA MỖI GIÂY (5,500 / 10,000 / 30,000 req/s tùy Region)**
 - ⭐ **Bạn có thể YÊU CẦU TĂNG QUOTA dùng Service Quotas Console**
 
-```
-   Users ──Upload / download (SSE-KMS)──► S3 Bucket ──API call──► KMS Key
-                                                        ▲
-                       ⚠️ Mỗi request đều gọi KMS → có thể bị THROTTLE
+```mermaid
+flowchart LR
+    U["Users"] -->|"Upload / download (SSE-KMS)"| S3["S3 Bucket"]
+    S3 -->|"API call"| K["KMS Key"]
+    K -.->|"⚠️ Mỗi request đều gọi KMS<br/>→ có thể bị THROTTLE"| S3
 ```
 
 > ⭐⭐ **Bẫy thi kinh điển:** Đề mô tả *"ứng dụng bị throttle khi đọc/ghi nhiều object mã hóa"* → nguyên nhân là **KMS quota limit** → giải pháp: **yêu cầu tăng quota** hoặc **chuyển sang SSE-S3**.
@@ -109,10 +114,12 @@
 - ⭐⭐ **BẮT BUỘC phải dùng HTTPS**
 - ⭐⭐ **Encryption key PHẢI được cung cấp trong HTTP HEADERS, CHO MỖI HTTP REQUEST**
 
-```
-   User ──upload (Object + Key)──► HTTPS ONLY + Key in Header ──► Amazon S3
-                                                                      │
-                          Client-Provided Key ──► [Encryption] ──► S3 Bucket
+```mermaid
+flowchart LR
+    U["User"] -->|"upload (Object + Key)<br/>⭐ HTTPS ONLY + Key in Header"| S3["Amazon S3"]
+    K["⭐ Client-Provided Key"] --> E["Encryption"]
+    S3 --> E
+    E --> B["S3 Bucket"]
 ```
 
 > ⚠️ ⭐⭐ **Không dùng được qua AWS Console** — phải dùng **CLI/SDK** vì cần đặt header thủ công.
@@ -126,10 +133,11 @@
 - ⭐⭐ **Client PHẢI TỰ GIẢI MÃ dữ liệu khi lấy về từ Amazon S3**
 - ⭐⭐ **Khách hàng QUẢN LÝ HOÀN TOÀN key và chu trình mã hóa**
 
-```
-   File + Client Key ──[Encryption]──► File (encrypted) ──upload HTTP(S)──► S3 Bucket
-                                                            ▲
-                                    ⭐ S3 KHÔNG biết gì về việc mã hóa
+```mermaid
+flowchart LR
+    F["File + Client Key"] -->|"Encryption<br/>(phía client)"| FE["File (encrypted)"]
+    FE -->|"upload HTTP(S)"| B["S3 Bucket"]
+    B -.-> N["⭐ S3 KHÔNG biết gì<br/>về việc mã hóa"]
 ```
 
 ---
@@ -174,10 +182,12 @@
 
 ### ⭐⭐⭐ Amazon S3 — Force Encryption in Transit: `aws:SecureTransport`
 
-```
-   User ──http──►  ❌ DENY
-                   S3 Bucket (my-bucket) + Bucket Policy
-   User ──https──► ✅ ALLOW
+```mermaid
+flowchart LR
+    U1["User"] -->|"http"| D["❌ DENY"]
+    U2["User"] -->|"https"| A["✅ ALLOW"]
+    D --> B["S3 Bucket (my-bucket)<br/>+ Bucket Policy"]
+    A --> B
 ```
 
 Bucket Policy ép buộc HTTPS:
@@ -312,18 +322,11 @@ Kết quả hiển thị:
 
 > **Bucket Policies được ĐÁNH GIÁ TRƯỚC "Default Encryption"**
 
-```
-   PUT Object request
-          │
-          ▼
-   ⭐ 1. Bucket Policy được đánh giá TRƯỚC
-          │
-          ├── DENY → ❌ Request bị từ chối
-          │
-          └── ALLOW
-                │
-                ▼
-   ⭐ 2. Default Encryption được áp dụng
+```mermaid
+flowchart TD
+    P["PUT Object request"] --> BP["⭐ 1. Bucket Policy được đánh giá TRƯỚC"]
+    BP -->|"DENY"| X["❌ Request bị từ chối"]
+    BP -->|"ALLOW"| DE["⭐ 2. Default Encryption được áp dụng"]
 ```
 
 ### Ví dụ Bucket Policy bắt buộc SSE-KMS
@@ -384,27 +387,13 @@ Kết quả hiển thị:
 
 ### ⭐⭐⭐ Luồng hoạt động của CORS (từ slide)
 
-```
-   Web Browser                                    Web Server (Cross-Origin)
-   (đang ở Origin                                  https://www.other.com
-   https://www.example.com)
-        │
-        │ ① ⭐ Preflight Request
-        │    OPTIONS /
-        │    Host: www.other.com
-        │    Origin: https://www.example.com
-        ├──────────────────────────────────────────────────►
-        │
-        │ ② ⭐ Preflight Response
-        │    Access-Control-Allow-Origin: https://www.example.com
-        │    Access-Control-Allow-Methods: GET, PUT, DELETE
-        ◄──────────────────────────────────────────────────┤
-        │
-        │ ③ ⭐ CORS Headers đã nhận → Trình duyệt ĐƯỢC PHÉP gửi request
-        │    GET /
-        │    Host: www.other.com
-        │    Origin: https://www.example.com
-        ├──────────────────────────────────────────────────►
+```mermaid
+sequenceDiagram
+    participant B as Web Browser<br/>(Origin https://www.example.com)
+    participant S as Web Server (Cross-Origin)<br/>https://www.other.com
+    B->>S: ① ⭐ Preflight Request<br/>OPTIONS / · Host: www.other.com<br/>Origin: https://www.example.com
+    S-->>B: ② ⭐ Preflight Response<br/>Access-Control-Allow-Origin: https://www.example.com<br/>Access-Control-Allow-Methods: GET, PUT, DELETE
+    B->>S: ③ ⭐ CORS Headers đã nhận → được phép gửi request<br/>GET / · Host: www.other.com<br/>Origin: https://www.example.com
 ```
 
 ### ⭐⭐ Ba bước cần nhớ
@@ -425,22 +414,15 @@ Kết quả hiển thị:
 
 ### Sơ đồ ví dụ 2 bucket (từ slide)
 
-```
-   Web Browser
-        │
-        │ ① GET /index.html
-        │    Host: http://my-bucket-html.s3-website.us-west-2.amazonaws.com
-        ├────────────────────────────────► S3 Bucket (my-bucket-html)
-        │                                   (Static Website Enabled)
-        ◄────── index.html ────────────────┤
-        │
-        │ ② GET /images/coffee.jpg
-        │    Host: http://my-bucket-assets.s3-website...
-        │    ⭐ Origin: http://my-bucket-html.s3-website...
-        ├────────────────────────────────► S3 Bucket (my-bucket-assets)
-        │                                   (Static Website Enabled)
-        │ ⭐ Access-Control-Allow-Origin:
-        ◄──── http://my-bucket-html.s3-website... ──┤
+```mermaid
+sequenceDiagram
+    participant B as Web Browser
+    participant H as S3 Bucket (my-bucket-html)<br/>Static Website Enabled
+    participant A as S3 Bucket (my-bucket-assets)<br/>Static Website Enabled
+    B->>H: ① GET /index.html<br/>Host: my-bucket-html.s3-website.us-west-2.amazonaws.com
+    H-->>B: index.html
+    B->>A: ② GET /images/coffee.jpg<br/>Host: my-bucket-assets.s3-website…<br/>⭐ Origin: http://my-bucket-html.s3-website…
+    A-->>B: ⭐ Access-Control-Allow-Origin:<br/>http://my-bucket-html.s3-website…
 ```
 
 ### File cấu hình CORS của khóa học ⭐
@@ -718,9 +700,10 @@ Root account → Security credentials → Access keys → Deactivate → Delete
 - ⭐ **Dữ liệu đó có thể được phân tích bằng các công cụ phân tích dữ liệu…**
 - ⭐⭐⭐ **Target logging bucket PHẢI Ở CÙNG AWS REGION**
 
-```
-   requests ──► My-bucket ──Log all requests──► Logging Bucket
-                                                (⭐ CÙNG Region)
+```mermaid
+flowchart LR
+    R["requests"] --> MB["My-bucket"]
+    MB -->|"Log all requests"| LB["Logging Bucket<br/>(⭐ CÙNG Region)"]
 ```
 
 Định dạng log: `https://docs.aws.amazon.com/AmazonS3/latest/dev/LogFormat.html`
@@ -732,16 +715,10 @@ Root account → Security credentials → Access keys → Deactivate → Delete
 > ⭐⭐⭐ **KHÔNG ĐƯỢC đặt logging bucket LÀ CHÍNH bucket đang được giám sát!**
 > ⭐⭐ **Nó sẽ tạo ra một VÒNG LẶP LOG (logging loop), và bucket của bạn sẽ PHÌNH TO THEO CẤP SỐ NHÂN (grow exponentially)**
 
-```
-   ┌──────────────────────────────────┐
-   │  App Bucket & Logging Bucket     │
-   │         (CÙNG MỘT BUCKET)         │
-   │              │                    │
-   │         PutObject                 │
-   │              │                    │
-   │              ▼                    │
-   │       ⭐ Logging loop ♾️          │
-   └──────────────────────────────────┘
+```mermaid
+flowchart TD
+    B["App Bucket & Logging Bucket<br/>(CÙNG MỘT BUCKET)"] -->|"PutObject"| B
+    B --> L["⭐ Logging loop ♾️<br/>chi phí bùng nổ"]
 ```
 
 > 💬 Nguyên văn slide: **"Do not try this at home 🙂"**
@@ -835,11 +812,11 @@ Root account → Security credentials → Access keys → Deactivate → Delete
 
 > **Người dùng được cấp pre-signed URL KẾ THỪA QUYỀN của user đã SINH RA URL đó, cho GET / PUT**
 
-```
-   Owner ──generate pre-signed URL──► URL ──► User
-                                       │
-                                       └──► S3 Bucket (⭐ PRIVATE)
-                        ⭐ User truy cập được dù bucket là private
+```mermaid
+flowchart LR
+    O["Owner"] -->|"generate pre-signed URL"| U["URL"]
+    U --> US["User"]
+    US -->|"⭐ truy cập được dù bucket là private"| B["S3 Bucket (⭐ PRIVATE)"]
 ```
 
 ### ⭐⭐ Ba ví dụ use case (từ slide)
@@ -915,8 +892,10 @@ Cả hai đều phục vụ mô hình ⭐⭐ **WORM (Write Once Read Many)**.
 - ⭐⭐ **KHÓA policy cho các lần chỉnh sửa tương lai (KHÔNG THỂ thay đổi hoặc xóa nữa)**
 - ⭐ **Hữu ích cho COMPLIANCE và DATA RETENTION**
 
-```
-   Object ──► Vault Lock Policy ──► ⭐ Object CAN'T BE DELETED
+```mermaid
+flowchart LR
+    O["Object"] --> V["Vault Lock Policy"]
+    V --> D["⭐ Object CAN'T BE DELETED"]
 ```
 
 > ⚠️ ⭐⭐ **Một khi đã LOCK, policy là VĨNH VIỄN** — kể cả AWS cũng không gỡ được.
@@ -983,14 +962,14 @@ Cả hai đều phục vụ mô hình ⭐⭐ **WORM (Write Once Read Many)**.
 
 ### Sơ đồ (từ slide) ⭐
 
-```
-   Users (Finance) ──Policy: Grant R/W to /finance prefix──► Finance Access Point ──┐
-                                                                                     │
-   Users (Sales) ────Policy: Grant R/W to /sales prefix────► Sales Access Point ────┼──► S3 Bucket
-                                                                                     │    /finance/…
-   Users (Analytics) ─Policy: Grant R to entire bucket─────► Analytics Access Point ─┘    /sales/…
-                                                                                          ▲
-                                                                    ⭐ Simple Bucket Policy
+```mermaid
+flowchart LR
+    UF["Users (Finance)"] -->|"Policy: Grant R/W to /finance prefix"| AF["Finance Access Point"]
+    US["Users (Sales)"] -->|"Policy: Grant R/W to /sales prefix"| AS["Sales Access Point"]
+    UA["Users (Analytics)"] -->|"Policy: Grant R to entire bucket"| AA["Analytics Access Point"]
+    AF --> B["S3 Bucket<br/>/finance/… · /sales/…<br/>⭐ Simple Bucket Policy"]
+    AS --> B
+    AA --> B
 ```
 
 ### ⭐⭐ Vấn đề mà Access Points giải quyết
@@ -1007,18 +986,13 @@ Cả hai đều phục vụ mô hình ⭐⭐ **WORM (Write Once Read Many)**.
 - ⭐⭐ **BẠN PHẢI TẠO MỘT VPC ENDPOINT để truy cập Access Point (Gateway hoặc Interface Endpoint)**
 - ⭐⭐ **VPC Endpoint Policy PHẢI CHO PHÉP truy cập tới bucket đích VÀ Access Point**
 
-```
-   ┌──────────── VPC ────────────┐
-   │  EC2 Instance                │
-   │       │                      │
-   │       ▼                      │
-   │  VPC Endpoint ──► Endpoint Policy
-   └───────┬──────────────────────┘
-           ▼
-   Access Point (VPC Origin) ──► Access Point Policy
-           │
-           ▼
-      S3 Bucket ──► Bucket Policy
+```mermaid
+flowchart TD
+    subgraph VPC["VPC"]
+        E["EC2 Instance"] --> VE["VPC Endpoint<br/>⭐ Endpoint Policy"]
+    end
+    VE --> AP["Access Point (VPC Origin)<br/>⭐ Access Point Policy"]
+    AP --> B["S3 Bucket<br/>⭐ Bucket Policy"]
 ```
 
 ### ⭐⭐ Ba lớp policy phải cùng cho phép
@@ -1050,19 +1024,17 @@ Cả hai đều phục vụ mô hình ⭐⭐ **WORM (Write Once Read Many)**.
 
 ### Sơ đồ kiến trúc (từ slide) ⭐
 
-```
-                        ┌──────────── AWS Cloud ────────────┐
-   E-Commerce App ──────┤                                    │
-   (Original Object)    │         S3 Bucket                  │
-                        │             ▲                       │
-                        │    Supporting S3 Access Point       │
-                        │       ╱                ╲            │
-        S3 Object Lambda Access Point      S3 Object Lambda Access Point
-                │                                    │
-        Redacting Lambda Function          Enriching Lambda Function
-                │                                    │  ▲
-                ▼                                    ▼  │ Customer Loyalty
-        Redacted Object ──► Analytics App    Enriched Object ──► Marketing App
+```mermaid
+flowchart TD
+    EC["E-Commerce App<br/>(Original Object)"] --> B["S3 Bucket"]
+    B --> SAP["Supporting S3 Access Point"]
+    SAP --> L1["S3 Object Lambda Access Point"]
+    SAP --> L2["S3 Object Lambda Access Point"]
+    L1 --> RF["Redacting Lambda Function"]
+    L2 --> EF["Enriching Lambda Function"]
+    RF --> RO["Redacted Object"] --> AN["Analytics App"]
+    EF --> EO["Enriched Object"] --> MK["Marketing App"]
+    CL["Customer Loyalty<br/>(dữ liệu bổ sung)"] --> EF
 ```
 
 ### ⭐⭐ Luồng hoạt động

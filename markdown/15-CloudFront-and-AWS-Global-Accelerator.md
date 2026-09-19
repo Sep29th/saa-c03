@@ -64,15 +64,10 @@
 
 ### CloudFront at a high level ⭐
 
-```
-   Client ──GET /beach.jpg?size=300x300 HTTP/1.1──►  CloudFront Edge Location
-           User-Agent: Mozilla/4.0 ...                        │
-           Host: www.example.com                        ⭐ Local Cache
-           Accept-Encoding: gzip, deflate                     │
-                                                              │ Forward Request
-                                                              │ to your Origin
-                                                              ▼
-                                                        Origin (S3 hoặc HTTP)
+```mermaid
+flowchart LR
+    C["Client"] -->|"GET /beach.jpg?size=300x300 HTTP/1.1<br/>User-Agent: Mozilla/4.0 …<br/>Host: www.example.com<br/>Accept-Encoding: gzip, deflate"| E["CloudFront Edge Location<br/>⭐ Local Cache"]
+    E -->|"Forward Request to your Origin<br/>(khi cache MISS)"| O["Origin (S3 hoặc HTTP)"]
 ```
 
 > ⭐ **Cơ chế:** Request đi tới **Edge Location gần nhất**. Nếu **cache hit** → trả về ngay. Nếu **cache miss** → forward tới Origin, lấy về, **cache lại**, rồi trả cho client.
@@ -81,14 +76,16 @@
 
 ### ⭐⭐ CloudFront — S3 as an Origin
 
-```
-         Public www                        Private AWS
-   Users ──────► Edge Los Angeles ─────────────┐
-   Users ──────► Edge Mumbai ──────────────────┤
-   Users ──────► Edge Melbourne ───────────────┼──► Origin (S3 bucket)
-   Users ──────► Edge São Paulo ───────────────┘         ▲
-                                                   ⭐ Origin Access Control (OAC)
-                                                      + S3 bucket policy
+```mermaid
+flowchart LR
+    U1["Users"] -->|"Public www"| LA["Edge Los Angeles"]
+    U2["Users"] -->|"Public www"| MU["Edge Mumbai"]
+    U3["Users"] -->|"Public www"| ME["Edge Melbourne"]
+    U4["Users"] -->|"Public www"| SP["Edge São Paulo"]
+    LA -->|"⭐ Private AWS"| O["Origin (S3 bucket)<br/>⭐ Origin Access Control (OAC)<br/>+ S3 bucket policy"]
+    MU --> O
+    ME --> O
+    SP --> O
 ```
 
 ### ⭐⭐⭐ Origin Access Control (OAC)
@@ -215,14 +212,18 @@ Có **HAI cách** để dùng ALB/EC2 làm origin.
   - ⭐ **Network Load Balancer**
   - ⭐ **EC2 Instances**
 
-```
-   Users ──► CloudFront (Edge Location) ──► VPC Origin ──┐
-                                                          │
-                          ┌──────── VPC / Private Subnet ─┴────────┐
-                          │  Application Load Balancer              │
-                          │  Network Load Balancer                  │
-                          │  EC2 Instance                           │
-                          └─────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    U["Users"] --> CF["CloudFront<br/>(Edge Location)"]
+    CF --> VO["⭐ VPC Origin"]
+    subgraph VPC["VPC / Private Subnet"]
+        ALB["Application Load Balancer"]
+        NLB["Network Load Balancer"]
+        EC2["EC2 Instance"]
+    end
+    VO --> ALB
+    VO --> NLB
+    VO --> EC2
 ```
 
 > ⭐⭐ **Ưu điểm lớn nhất:** tài nguyên **không cần public IP**, **không expose ra internet** → bảo mật tốt nhất.
@@ -233,12 +234,10 @@ Có **HAI cách** để dùng ALB/EC2 làm origin.
 
 #### 🔹 Trường hợp A — EC2 Instances (phải PUBLIC)
 
-```
-   Edge Location (Edge Location Public IPs)
-            │
-            │ ⭐ Allow Public IP of Edge Locations
-            ▼
-      Security group ──► EC2 Instances (⭐ Must be Public)
+```mermaid
+flowchart TD
+    E["Edge Location<br/>(Edge Location Public IPs)"] -->|"⭐ Allow Public IP of Edge Locations"| SG["Security group"]
+    SG --> EC2["EC2 Instances<br/>(⭐ Must be Public)"]
 ```
 
 - ⭐⭐ **EC2 Instances PHẢI là PUBLIC**
@@ -247,15 +246,12 @@ Có **HAI cách** để dùng ALB/EC2 làm origin.
 
 #### 🔹 Trường hợp B — Application Load Balancer (phải PUBLIC)
 
-```
-   Edge Location
-            │ ⭐ Allow Public IP of Edge Locations
-            ▼
-      Security group ──► Application Load Balancer (⭐ Must be Public)
-                                    │
-                                    │ ⭐ Allow Security Group of Load Balancer
-                                    ▼
-                          Security group ──► EC2 Instances (⭐ Can be PRIVATE)
+```mermaid
+flowchart TD
+    E["Edge Location"] -->|"⭐ Allow Public IP of Edge Locations"| SG1["Security group"]
+    SG1 --> ALB["Application Load Balancer<br/>(⭐ Must be Public)"]
+    ALB -->|"⭐ Allow Security Group of Load Balancer"| SG2["Security group"]
+    SG2 --> EC2["EC2 Instances<br/>(⭐ Can be PRIVATE)"]
 ```
 
 - ⭐⭐ **ALB PHẢI là PUBLIC**, SG của ALB cho phép **Public IP của Edge Locations**
@@ -328,24 +324,14 @@ CloudFront → chọn distribution → tab Security → Geographic restrictions 
 
 ### Sơ đồ ⭐
 
-```
-   GET /index.html ──► CloudFront
-                          │
-              ┌───────────┴───────────┐
-              ▼                        ▼
-       Edge Location            Edge Location
-          Cache                     Cache
-       (index.html)               (/images/)
-              ▲                        ▲
-              └──── ⭐ invalidate ─────┘
-                    Invalidate:
-                    - /index.html
-                    - /images/*
-                          ▲
-                   update files
-                          │
-                  S3 Bucket (origin)
-                  index.html, /images/
+```mermaid
+flowchart TD
+    R["GET /index.html"] --> CF["CloudFront"]
+    CF --> E1["Edge Location Cache<br/>(index.html)"]
+    CF --> E2["Edge Location Cache<br/>(/images/)"]
+    S3["S3 Bucket (origin)<br/>index.html, /images/"] -->|"update files"| INV["⭐ Invalidate:<br/>/index.html<br/>/images/*"]
+    INV -->|"invalidate"| E1
+    INV -->|"invalidate"| E2
 ```
 
 ### ⭐⭐ Cú pháp Invalidation
@@ -398,11 +384,13 @@ aws cloudfront create-invalidation \
 - ⭐⭐ **Họ đi qua INTERNET CÔNG CỘNG, điều này có thể THÊM RẤT NHIỀU ĐỘ TRỄ do NHIỀU HOP**
 - ⭐⭐ **Chúng ta muốn đi NHANH NHẤT CÓ THỂ qua MẠNG AWS để GIẢM THIỂU ĐỘ TRỄ**
 
-```
-   America ──hops──┐
-   Europe ──hops───┼──► Public ALB   ⚠️ Nhiều hop trên internet công cộng = chậm
-   Australia ─hops─┤
-   India ──hops────┘
+```mermaid
+flowchart LR
+    A["America"] -->|"hops"| ALB["Public ALB"]
+    E["Europe"] -->|"hops"| ALB
+    AU["Australia"] -->|"hops"| ALB
+    I["India"] -->|"hops"| ALB
+    ALB -.-> N["⚠️ Nhiều hop trên internet công cộng = CHẬM"]
 ```
 
 ---
@@ -425,12 +413,14 @@ aws cloudfront create-invalidation \
 - ⭐⭐ **Anycast IP gửi traffic TRỰC TIẾP tới Edge Locations**
 - ⭐⭐ **Edge locations gửi traffic tới ứng dụng của bạn**
 
-```
-   America ──┐
-   Europe ───┼──► ⭐ 2 Anycast IP ──► Edge location ──⭐ Private AWS──► Public ALB
-   Australia ┤
-   India ────┘
-              ▲ Đi qua mạng AWS nội bộ → nhanh hơn internet công cộng
+```mermaid
+flowchart LR
+    A["America"] --> AC["⭐ 2 Anycast IP"]
+    E["Europe"] --> AC
+    AU["Australia"] --> AC
+    I["India"] --> AC
+    AC --> ED["Edge location"]
+    ED -->|"⭐ Private AWS network<br/>nhanh hơn internet công cộng"| ALB["Public ALB"]
 ```
 
 ---
